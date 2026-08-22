@@ -1,7 +1,7 @@
 {
   "name": "dsh-llm-agentrouter",
   "version": "0.1.0",
-  "description": "DeepSeek Harness bundle: the AgentRouter relay as one pi-ai route with a domestic/international endpoint switch in Settings, plus the Claude Code User-Agent fence the relay requires.",
+  "description": "DeepSeek Harness bundle: the AgentRouter relay as one pi-ai route with a domestic/international endpoint switch in Settings, plus the outbound request compatibility the relay requires.",
   "keywords": [
     "deepseek-harness",
     "dsh-plugin",

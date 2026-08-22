@@ -3,16 +3,16 @@
 [![test](https://github.com/aqiu817/dsh-llm-agentrouter/actions/workflows/test.yml/badge.svg)](https://github.com/aqiu817/dsh-llm-agentrouter/actions/workflows/test.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-把 AgentRouter 中转站接入 DeepSeek Harness 的 profile bundle：一条 provider 路由、三个模型及其推理档位，一个在「设置 → 插件」里切换国内 / 国际端点的开关，以及中转站要求的 Claude Code `User-Agent` 围栏。
+把 AgentRouter 中转站接入 DeepSeek Harness 的 profile bundle：一条 provider 路由、三个模型及其推理档位，一个在「设置 → 插件」里切换国内 / 国际端点的开关，以及一层让出站请求符合该中转站要求的兼容处理。
 
 ## 它做了什么
 
 | 组成 | 位置 | 职责 |
 | --- | --- | --- |
 | 路由声明 | `cordis.patch.yml` | 覆盖 `llm-pi-ai` 行，声明单条 `agentrouter` 路由，`baseURL` 指向一个哨兵主机 |
-| 端点 + UA 围栏 | `lib/index.js` | 注册 `llm-agentrouter` 设置分节；把哨兵主机改写为所选端点，并改写 `user-agent` |
+| 端点 + 请求兼容 | `lib/index.js` | 注册 `llm-agentrouter` 设置分节；把哨兵主机改写为所选端点，并把 `user-agent` 换成该中转站要求的取值 |
 | 端点开关 | `lib/client.js` | 浏览器端插件，在「设置 → 插件」渲染国内 / 国际单选卡片 |
-| 行为测试 | `test/` | 19 项：浏览器 bundle 6 项、bundle patch 5 项、围栏语义 6 项、活体流式 1 项、无围栏必被拒的反向对照 1 项 |
+| 行为测试 | `test/` | 19 项：浏览器 bundle 6 项、bundle patch 5 项、改写语义 6 项、活体流式 1 项、未经改写必被拒的反向对照 1 项 |
 
 ## 为什么是一条路由，而不是两条
 
@@ -22,13 +22,13 @@
 
 ## 为什么需要一个插件，而不只是一段配置
 
-中转站以 `User-Agent` 认证客户端。而 `dsh-llm-pi-ai` 在发出请求前会把 profile `headers` 中与归因标头同名的键（大小写不敏感）全部剔除，再追加自己的 `user-agent: deepseek-harness/<版本>`——归因是设计上不可抑制的。
+中转站以 `User-Agent` 认证客户端：只接受它自己规定的那个取值，其余一概拒绝。而 `dsh-llm-pi-ai` 在发出请求前会把 profile `headers` 中与归因标头同名的键（大小写不敏感）全部剔除，再追加自己的 `user-agent: deepseek-harness/<版本>`——归因是设计上不可抑制的。仅靠配置无法让请求通过，因此需要一层兼容处理。
 
 因此替换只能发生在适配器之下：provider SDK 构造客户端时从全局作用域取 `fetch`，围栏就装在那里。它刻意窄：只改一个标头、只对哨兵与端点主机生效、经 `ctx.effect()` 安装，插件停用或重载即恢复它替换掉的那个 `fetch`。端点选择每次请求现读，改设置后下一次请求即生效，不需要重载任何东西。
 
 ## 已在活体中转站上验证的事实
 
-- **UA 是唯一门禁。** 同一 key、同一请求体，带 `claude-cli/2.1.161 (external, cli)` 得 200；带 harness 归因 UA 得 401 `unauthorized_client_error`。这条断言写进了测试，若中转站日后取消门禁，测试会失败，围栏即可退休。
+- **UA 是唯一门禁。** 同一 key、同一请求体，带中转站要求的取值得 200；带 harness 归因 UA 得 401 `unauthorized_client_error`。除此之外没有别的客户端校验。这条断言写进了测试，若中转站日后取消门禁，测试会失败，这层兼容处理即可退休。
 - **三个模型都走 `/v1/chat/completions`。** `claude-opus-5`、`claude-opus-4-8`、`gpt-5.6-sol` 均返回 200；上游实际模型名分别为 `anthropic/claude-opus-5-ps-aws-dst`、`MaaS_Cl_Opus_4.8_20260528_cache`、`gpt-5.6-sol`。
 - **协议形状。** 接受 `system` 角色、`max_tokens`、顶层 `reasoning_effort`、`strict` 工具、`stream_options.include_usage`；`developer` 角色与 `max_completion_tokens` 也不报错，但按更保守的一侧声明 compat。
 - **推理档位。** `off`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max` 逐一探测，全部 200。Opus 两款不提供 `minimal`（与官方目录一致）。
@@ -92,7 +92,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 | `endpoint` | `cn` | 选中的端点键，`cn` 或 `intl`——端点开关写的就是它 |
 | `endpoints` | `{cn: ps.air-outer.com, intl: agentrouter.org}` | 每个端点键对应的主机；源站搬迁是一次设置改动，不是一次发版 |
 | `sentinel` | `relay.agentrouter.internal` | 路由 `baseURL` 中被改写的占位主机，必须保持不可解析 |
-| `userAgent` | `claude-cli/2.1.161 (external, cli)` | 送往中转站的 `User-Agent`。将来若改钉另一个 CLI 版本，只需改这里 |
+| `userAgent` | 见 `lib/index.js` 中的默认值 | 送往中转站的 `User-Agent`。中转站将来若改钉另一个取值，只需改这里，不必改代码 |
 | `announce` | `true` | 激活时在日志里报告一次已装的围栏 |
 
 ## 密钥安全
@@ -104,7 +104,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 ## 已知边界
 
 - **图片输入未声明。** 路由是 `defaultInput: [text]`。探测中转站的图片请求得到超时与 Bedrock 429，未能确认，因此按保守一侧声明：少声明的代价是一次点名该模型的拒绝，多声明的代价是消息已持久化后再被提供方拒绝，会话将不断重试一个不可能成功的请求。
-- **围栏是进程级的全局替换。** 它按主机分派，对其他主机零影响；但同一进程内若有另一个包装层在它之后安装，卸载时本插件会主动让位，不去夺回全局。
+- **这层兼容处理是进程级的全局替换。** 它按主机分派，对其他主机零影响；但同一进程内若有另一个包装层在它之后安装，卸载时本插件会主动让位，不去夺回全局。
 - **一条凭据服务两个端点。** 因为它们是同一个中转站账号。若两个端点日后使用不同账号，需要拆回两条路由。
 - **浏览器 bundle 是手写的。** 生成它的 `clientBundle` tsdown 预设未发布，所以 `lib/client.js` 直接以加载器的 lazy-CJS 工厂格式写成，样式类名自带前缀而非 CSS module 哈希。测试因此覆盖了通常由构建保证的部分：注册协议、所需模块说明符、两份词典的键一致性。
 - **端点切换不影响进行中的请求。** 它在下一次 `fetch` 生效；正在流式返回的那一轮仍走旧端点。
