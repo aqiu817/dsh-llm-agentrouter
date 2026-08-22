@@ -112,7 +112,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 ## 兼容性
 
-本插件在 DSH 宿主进程内运行，宿主自带 `@deepseek-ai/cordis`、`@deepseek-ai/schemastery` 与 `@deepseek-ai/dsh-settings`——它们因此声明为 `peerDependencies`，由宿主提供。已验证的组合：
+本插件在 DSH 宿主进程内运行，`@deepseek-ai/cordis`、`@deepseek-ai/schemastery` 与 `@deepseek-ai/dsh-settings` 都由宿主提供，因此声明为**不限版本且可选**的 `peerDependencies`：插件用到的都是这三个包多个版本里稳定不变的部分，钉死版本只会在宿主升级时凭空造出一次安装失败。下表是已实测跑通的组合，供对照，不是下限：
 
 | 依赖 | 已验证版本 |
 | --- | --- |

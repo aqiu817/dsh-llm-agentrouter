@@ -50,9 +50,20 @@
     "node": ">=22"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-settings": "^0.1.1-rc.2",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-settings": "*",
+    "@deepseek-ai/schemastery": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-settings": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@deepseek-ai/dsh-settings": "0.1.1-rc.2",
