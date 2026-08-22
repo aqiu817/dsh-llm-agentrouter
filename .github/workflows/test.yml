@@ -1,0 +1,25 @@
+# The offline half of the suite. The live relay tests skip themselves without a
+# resolvable key, so this workflow runs the whole command and still stays green
+# on a fork with no secret configured.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+        env:
+          # Optional. Set the repository secret to also exercise the live relay
+          # tests; without it they skip and the offline suite still runs.
+          AGENTROUTER_API_KEY: ${{ secrets.AGENTROUTER_API_KEY }}

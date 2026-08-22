@@ -1,0 +1,109 @@
+# dsh-llm-agentrouter bundle patch — the AgentRouter relay as ONE provider route
+# whose endpoint is a runtime choice, plus the fence that makes both possible.
+#
+# Applied after the dsh-base / dsh-web-app bundle layers, so the `llm-pi-ai`
+# row below overrides the dormant zero-route entry dsh-base mounts.
+#
+# WHY ONE ROUTE AND NOT TWO
+# The relay serves the same three models at a domestic and an international
+# endpoint; only the origin differs. Declaring a route per endpoint put every
+# model in the picker twice and made "which endpoint" a choice the user had to
+# re-make on every model switch. It is not a model property — it is one
+# deployment-wide setting, so it lives in this plugin's own settings section and
+# the picker shows one AgentRouter group.
+#
+# WHY THE BASE URL IS A SENTINEL
+# `baseURL` is resolved once per request by the adapter, but it cannot read this
+# plugin's endpoint choice — the two live in different namespaces. So the route
+# addresses a host that deliberately does not exist, and the fence rewrites it
+# to the chosen endpoint on the way out (`.internal` is reserved for exactly
+# this, so an unfenced request fails to resolve instead of reaching anything
+# real). The fence has to be in the request path regardless: the relay
+# authenticates its client by User-Agent, and the adapter strips profile headers
+# colliding with its mandatory attribution. See lib/index.js.
+#
+# CREDENTIALS
+# `apiKeyEnv` is a credential *reference* resolved per request; the secret lives
+# in $DSH_HOME/.credentials.yaml (or the environment), never in this file. Do
+# NOT move a key into `headers`: that dict is returned verbatim by the adapter's
+# `describe()` and rendered by the Models settings page. One reference serves
+# both endpoints because it is one relay account.
+#
+# MODEL CATALOG
+# pi-ai's installed catalog describes all three models, but under their vendor
+# providers (`anthropic`, `openai`) and other protocols — Opus via
+# anthropic-messages, gpt-5.6-sol via openai-responses. A hand-declared route
+# inherits nothing, so capacities, reasoning levels, and compat switches are
+# restated here from that catalog, adjusted for Chat Completions.
+#
+# `reasoningEfforts` keys are the levels the picker offers; each value is the
+# wire spelling sent as `reasoning_effort`. All three models were probed against
+# the live relay: every level below answered 200. `off:` (declared, no value)
+# offers Off and sends nothing, which is what an OpenAI-shaped endpoint wants.
+# WHY THE PICKER SAYS NOTHING ABOUT THE ENDPOINT
+# The model picker renders no child slots, so a plugin cannot inject anything
+# into that menu; per group it shows only `displayName`, and per model only the
+# name and an adapter-supplied description a hand-declared pi-ai route has no
+# field for. The group title is therefore the only reachable surface — and it is
+# a name, not a notice, so it stays a name. The endpoint is explained where it is
+# changed: 设置 → 插件 → AgentRouter 中转站.
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+      agentrouter:
+        displayName: AgentRouter
+        apiKeyEnv: AGENTROUTER_API_KEY
+        api: openai-completions
+        # Rewritten per request by llm-agentrouter to the selected endpoint.
+        baseURL: https://relay.agentrouter.internal/v1
+        defaultInput:
+          - text
+        # The relay is not an endpoint pi-ai can recognize, so its detection
+        # would address it as OpenAI itself: `developer` system role and
+        # `max_completion_tokens`. Probes show it accepts plain `system`,
+        # `max_tokens`, top-level `reasoning_effort`, and `strict` tools.
+        compat:
+          thinkingFormat: openai
+          supportsReasoningEffort: true
+          supportsDeveloperRole: false
+          maxTokensField: max_tokens
+          supportsStore: false
+          supportsStrictMode: true
+          supportsUsageInStreaming: true
+        models:
+          - id: claude-opus-5
+            name: Claude Opus 5
+            contextWindow: 1000000
+            maxTokens: 128000
+            reasoningEfforts: &opus-efforts
+              off:
+              low: low
+              medium: medium
+              high: high
+              xhigh: xhigh
+              max: max
+          - id: claude-opus-4-8
+            name: Claude Opus 4.8
+            contextWindow: 1000000
+            maxTokens: 128000
+            reasoningEfforts: *opus-efforts
+          - id: gpt-5.6-sol
+            name: GPT 5.6 Sol
+            contextWindow: 272000
+            maxTokens: 128000
+            reasoningEfforts:
+              off:
+              minimal: minimal
+              low: low
+              medium: medium
+              high: high
+              xhigh: xhigh
+              max: max
+
+# The endpoint switch and the User-Agent fence. Both are one plugin because both
+# are one rewrite of one outbound request, and splitting them would mean two
+# wrappers over the same global for the same hostname.
+- insert:
+    - id: llm-agentrouter
+      name: 'dsh-llm-agentrouter'
