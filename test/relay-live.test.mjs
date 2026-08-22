@@ -67,7 +67,24 @@ function storedKey() {
   }
 }
 
-const key = process.env.AGENTROUTER_API_KEY ?? storedKey()
+/**
+ * The relay key, or undefined when there is nothing usable.
+ *
+ * An unset GitHub Actions secret arrives as an empty string rather than as an
+ * absent variable, so presence alone is not enough: a blank value must read as
+ * absent, or CI would try to authenticate with `Bearer ` and fail a test that
+ * was meant to skip.
+ *
+ * @returns {string | undefined} a non-blank key.
+ */
+function relayKey() {
+  for (const candidate of [process.env.AGENTROUTER_API_KEY, storedKey()]) {
+    if (typeof candidate === 'string' && candidate.trim() !== '') return candidate
+  }
+  return undefined
+}
+
+const key = relayKey()
 const dist = piAiDist()
 const SENTINEL_HOST = 'relay.agentrouter.internal'
 // The route's own baseURL: the fence is what makes it reach anything, which is
@@ -179,7 +196,7 @@ test('the declared route streams a turn from the relay', { skip }, async () => {
   }
 })
 
-test('without the fence the relay rejects the harness User-Agent', { skip: key === undefined && 'no AGENTROUTER_API_KEY' }, async () => {
+test('without the fence the relay rejects the harness User-Agent', { skip: key === undefined ? 'no AGENTROUTER_API_KEY' : false }, async () => {
   // The negative control that gives the test above its meaning: the relay gates
   // on User-Agent alone, so the same key and body must fail unfenced. If this
   // ever passes, the gate is gone and the fence can be retired.
