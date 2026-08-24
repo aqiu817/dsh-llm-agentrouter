@@ -100,6 +100,27 @@
               high: high
               xhigh: xhigh
               max: max
+          # Tiers mirror what the first-party `deepseek-official` route offers for
+          # DeepSeek-V4-Flash — off / low / high / max — rather than the relay's
+          # full enum. The relay does accept `minimal`, `medium`, and `xhigh` for
+          # this model, but the levels a model is *offered* under should match the
+          # vendor's own selection; add them here if that ever changes.
+          #
+          # `off` carries the wire value `none` instead of being left empty, and
+          # that is not cosmetic: omitting `reasoning_effort` entirely still
+          # returns `reasoning_content` with a nonzero `reasoning_tokens`, so an
+          # empty `off:` would offer a switch that does nothing. `none` is the
+          # only spelling that actually stops the thinking, and it is the relay's
+          # own word — `off` is rejected with a 400 naming the accepted enum.
+          - id: deepseek-v4f
+            name: DeepSeek V4 Flash
+            contextWindow: 1000000
+            maxTokens: 256000
+            reasoningEfforts:
+              off: none
+              low: low
+              high: high
+              max: max
 
 # The endpoint switch and the User-Agent fence. Both are one plugin because both
 # are one rewrite of one outbound request, and splitting them would mean two
