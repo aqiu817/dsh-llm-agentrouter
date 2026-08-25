@@ -42,7 +42,7 @@ test('the plugin row is inserted so the fence and the switch actually load', () 
 
 test('every model declares the levels the relay was probed with', () => {
   const ids = route.models.map((model) => model.id)
-  assert.deepEqual(ids, ['claude-opus-5', 'claude-opus-4-8', 'gpt-5.6-sol', 'deepseek-v4f'])
+  assert.deepEqual(ids, ['claude-opus-5', 'claude-opus-4-8', 'gpt-5.6-sol', 'deepseek-v4-flash'])
 
   const wire = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
   for (const model of route.models) {
@@ -62,10 +62,10 @@ test('every model declares the levels the relay was probed with', () => {
   }
 })
 
-test('deepseek-v4f can actually stop thinking', () => {
+test('deepseek-v4-flash can actually stop thinking', () => {
   // Omitting `reasoning_effort` still returns reasoning content for this model,
   // so an empty `off:` would render a switch that changes nothing. Only the
   // relay's own `none` disables it.
-  const efforts = route.models.find((model) => model.id === 'deepseek-v4f').reasoningEfforts
+  const efforts = route.models.find((model) => model.id === 'deepseek-v4-flash').reasoningEfforts
   assert.equal(efforts.off, 'none')
 })

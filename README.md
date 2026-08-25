@@ -29,10 +29,10 @@
 ## 已在活体中转站上验证的事实
 
 - **UA 是唯一门禁。** 同一 key、同一请求体，带中转站要求的取值得 200；带 harness 归因 UA 得 401 `unauthorized_client_error`。除此之外没有别的客户端校验。这条断言写进了测试，若中转站日后取消门禁，测试会失败，这层兼容处理即可退休。
-- **四个模型都走 `/v1/chat/completions`。** `claude-opus-5`、`claude-opus-4-8`、`gpt-5.6-sol`、`deepseek-v4f` 均返回 200；前三者的上游实际模型名分别为 `anthropic/claude-opus-5-ps-aws-dst`、`MaaS_Cl_Opus_4.8_20260528_cache`、`gpt-5.6-sol`。两个端点的 `/v1/models` 返回同一组 id。
+- **四个模型都走 `/v1/chat/completions`。** `claude-opus-5`、`claude-opus-4-8`、`gpt-5.6-sol`、`deepseek-v4-flash` 均返回 200；前三者的上游实际模型名分别为 `anthropic/claude-opus-5-ps-aws-dst`、`MaaS_Cl_Opus_4.8_20260528_cache`、`gpt-5.6-sol`。两个端点的 `/v1/models` 返回同一组 id。
 - **协议形状。** 接受 `system` 角色、`max_tokens`、顶层 `reasoning_effort`、`strict` 工具、`stream_options.include_usage`；`developer` 角色与 `max_completion_tokens` 也不报错，但按更保守的一侧声明 compat。
 - **推理档位。** 线路接受的取值为 `none`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`（由一次故意的非法值从反序列化错误里读出），逐一探测全部 200。Opus 两款不提供 `minimal`（与官方目录一致）。
-- **`deepseek-v4f` 的档位对齐第一方目录。** 它是 DeepSeek-V4-Flash 经中转站转发，因此只声明 DSH 自带 `deepseek-official` 路由为该模型提供的四档：`off`/`low`/`high`/`max`；中转站虽也接受 `minimal`/`medium`/`xhigh`，但一个模型「被提供」哪些档位，应与厂商自己的选择一致。
+- **`deepseek-v4-flash` 的档位对齐第一方目录。** 它是 DeepSeek-V4-Flash 经中转站转发，因此只声明 DSH 自带 `deepseek-official` 路由为该模型提供的四档：`off`/`low`/`high`/`max`；中转站虽也接受 `minimal`/`medium`/`xhigh`，但一个模型「被提供」哪些档位，应与厂商自己的选择一致。
 - **它的「关闭思考」必须显式送出 `none`。** 完全不带 `reasoning_effort` 时仍返回 `reasoning_content` 且 `reasoning_tokens` 非零，所以留空的 `off` 会是一个什么都不做的开关；`none` 是唯一真能关掉的取值，而 `off` 本身会被 400 拒绝。这一条也写进了测试。
 - **端点开关在真实 host 上生效。** 通过设置写入切到 `intl`、再切回 `cn`，两次都由真实会话拿到回答；每个模型各自跑通一次完整轮次。
 - **国际端点可能需要出站代理。** 在开发这个插件的网络环境中，直连 `agentrouter.org:443` 超时（其 DNS 只解析出 IPv6 地址），经本地 HTTP 代理则得 200。这属于网络环境差异，未必适用于每一台机器；见下方「国际端点」。

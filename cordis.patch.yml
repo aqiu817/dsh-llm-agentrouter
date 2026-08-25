@@ -112,7 +112,7 @@
           # empty `off:` would offer a switch that does nothing. `none` is the
           # only spelling that actually stops the thinking, and it is the relay's
           # own word — `off` is rejected with a 400 naming the accepted enum.
-          - id: deepseek-v4f
+          - id: deepseek-v4-flash
             name: DeepSeek V4 Flash
             contextWindow: 1000000
             maxTokens: 256000
