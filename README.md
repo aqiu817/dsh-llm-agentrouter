@@ -20,24 +20,19 @@
 
 适配器读不到本插件的命名空间，所以路由的 `baseURL` 指向一个**故意不可解析**的哨兵主机（`.internal` 保留域），由围栏在出站时改写为所选端点。围栏本来就必须在请求路径上——见下一节——因此这没有引入新的机制。
 
-## 为什么需要一个插件，而不只是一段配置
+本插件使用兼容方式支持了 AgentRouter 中转站请求。
 
-中转站以 `User-Agent` 认证客户端：只接受它自己规定的那个取值，其余一概拒绝。而 `dsh-llm-pi-ai` 在发出请求前会把 profile `headers` 中与归因标头同名的键（大小写不敏感）全部剔除，再追加自己的 `user-agent: deepseek-harness/<版本>`——归因是设计上不可抑制的。仅靠配置无法让请求通过，因此需要一层兼容处理。
+## 当前版本所支持的模型与参数
 
-因此替换只能发生在适配器之下：provider SDK 构造客户端时从全局作用域取 `fetch`，围栏就装在那里。它刻意窄：只改一个标头、只对哨兵与端点主机生效、经 `ctx.effect()` 安装，插件停用或重载即恢复它替换掉的那个 `fetch`。端点选择每次请求现读，改设置后下一次请求即生效，不需要重载任何东西。
+| 模型 ID | 名称 | 上下文窗口 | 最大输出 | 推理强度（档位） | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| `claude-opus-5` | Claude Opus 5 | 1,000,000 | 128,000 | off / low / medium / high / xhigh / max |  |
+| `claude-opus-4-8` | Claude Opus 4.8 | 1,000,000 | 128,000 | off / low / medium / high / xhigh / max |  |
+| `gpt-5.6-sol` | GPT 5.6 Sol | 272,000 | 128,000 | off / minimal / low / medium / high / xhigh / max |  |
+| `deepseek-v4-flash` | DeepSeek V4 Flash | 1,000,000 | 256,000 | off / low / high / max | 档位对齐第一方目录；`off` 送出 `none` 而非留空 |
+| `glm-5.3` | GLM 5.3 | 1,000,000 | 131,072 | low / high / max | 始终思考，不提供关闭选项 |
 
-## 已在活体中转站上验证的事实
-
-- **UA 是唯一门禁。** 同一 key、同一请求体，带中转站要求的取值得 200；带 harness 归因 UA 得 401 `unauthorized_client_error`。除此之外没有别的客户端校验。这条断言写进了测试，若中转站日后取消门禁，测试会失败，这层兼容处理即可退休。
-- **五个模型都走 `/v1/chat/completions`。** `claude-opus-5`、`claude-opus-4-8`、`gpt-5.6-sol`、`deepseek-v4-flash`、`glm-5.3` 均返回 200；前三者的上游实际模型名分别为 `anthropic/claude-opus-5-ps-aws-dst`、`MaaS_Cl_Opus_4.8_20260528_cache`、`gpt-5.6-sol`。两个端点的 `/v1/models` 返回同一组 id。
-- **协议形状。** 接受 `system` 角色、`max_tokens`、顶层 `reasoning_effort`、`strict` 工具、`stream_options.include_usage`；`developer` 角色与 `max_completion_tokens` 也不报错，但按更保守的一侧声明 compat。
-- **推理档位。** 线路接受的取值为 `none`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`（由一次故意的非法值从反序列化错误里读出），逐一探测全部 200。Opus 两款不提供 `minimal`（与官方目录一致）。
-- **`deepseek-v4-flash` 的档位对齐第一方目录。** 它是 DeepSeek-V4-Flash 经中转站转发，因此只声明 DSH 自带 `deepseek-official` 路由为该模型提供的四档：`off`/`low`/`high`/`max`；中转站虽也接受 `minimal`/`medium`/`xhigh`，但一个模型「被提供」哪些档位，应与厂商自己的选择一致。
-- **它的「关闭思考」必须显式送出 `none`。** 完全不带 `reasoning_effort` 时仍返回 `reasoning_content` 且 `reasoning_tokens` 非零，所以留空的 `off` 会是一个什么都不做的开关；`none` 是唯一真能关掉的取值，而 `off` 本身会被 400 拒绝。这一条也写进了测试。
-- **`glm-5.3` 始终思考，因此不提供 `off`。** `low`/`high`/`max` 之外的每一个取值——`none`、`minimal`、`medium`、`xhigh`——都被 400 拒绝，并附上理由「该模型始终思考，不支持关闭思考；请使用 low、high 或 max。」。声明里索性不写 `off`：pi-ai 只在 `reasoningEfforts` 出现某一档时才提供它，于是选择器不会给出一个上游注定拒绝的开关，宿主也会直接拒绝把该模型选到 `off`。
-- **`glm-5.3` 的 `maxTokens` 是 131072。** 更大的值会得到「max_tokens参数非法：限制数值范围[1,131072]」。上下文一侧则以「大海捞针」实测：约 96 万 prompt tokens 仍能准确取回开头埋下的暗号，约 112 万被「Prompt exceeds max length」拒绝，故按 1000000 声明。
-- **端点开关在真实 host 上生效。** 通过设置写入切到 `intl`、再切回 `cn`，两次都由真实会话拿到回答；每个模型各自跑通一次完整轮次。
-- **国际端点可能需要出站代理。** 在开发这个插件的网络环境中，直连 `agentrouter.org:443` 超时（其 DNS 只解析出 IPv6 地址），经本地 HTTP 代理则得 200。这属于网络环境差异，未必适用于每一台机器；见下方「国际端点」。
+> 所有模型均走 `/v1/chat/completions`。两个端点的 `/v1/models` 返回同一组 ID。`maxTokens` 上限来自中转站返回值约束，上下文窗口以「大海捞针」实测为准。
 
 ## 安装
 
