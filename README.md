@@ -3,7 +3,7 @@
 [![test](https://github.com/aqiu817/dsh-llm-agentrouter/actions/workflows/test.yml/badge.svg)](https://github.com/aqiu817/dsh-llm-agentrouter/actions/workflows/test.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-把 AgentRouter 中转站接入 DeepSeek Harness 的 profile bundle：一条 provider 路由、四个模型及其推理档位，一个在「设置 → 插件」里切换国内 / 国际端点的开关，以及一层让出站请求符合该中转站要求的兼容处理。
+把 AgentRouter 中转站接入 DeepSeek Harness 的 profile bundle：一条 provider 路由、五个模型及其推理档位，一个在「设置 → 插件」里切换国内 / 国际端点的开关，以及一层让出站请求符合该中转站要求的兼容处理。
 
 ## 它做了什么
 
@@ -12,7 +12,7 @@
 | 路由声明 | `cordis.patch.yml` | 覆盖 `llm-pi-ai` 行，声明单条 `agentrouter` 路由，`baseURL` 指向一个哨兵主机 |
 | 端点 + 请求兼容 | `lib/index.js` | 注册 `llm-agentrouter` 设置分节；把哨兵主机改写为所选端点，并把 `user-agent` 换成该中转站要求的取值 |
 | 端点开关 | `lib/client.js` | 浏览器端插件，在「设置 → 插件」渲染国内 / 国际单选卡片 |
-| 行为测试 | `test/` | 20 项：浏览器 bundle 6 项、bundle patch 6 项、改写语义 6 项、活体流式 1 项、未经改写必被拒的反向对照 1 项 |
+| 行为测试 | `test/` | 21 项：浏览器 bundle 6 项、bundle patch 7 项、改写语义 6 项、活体流式 1 项、未经改写必被拒的反向对照 1 项 |
 
 ## 为什么是一条路由，而不是两条
 
@@ -29,11 +29,13 @@
 ## 已在活体中转站上验证的事实
 
 - **UA 是唯一门禁。** 同一 key、同一请求体，带中转站要求的取值得 200；带 harness 归因 UA 得 401 `unauthorized_client_error`。除此之外没有别的客户端校验。这条断言写进了测试，若中转站日后取消门禁，测试会失败，这层兼容处理即可退休。
-- **四个模型都走 `/v1/chat/completions`。** `claude-opus-5`、`claude-opus-4-8`、`gpt-5.6-sol`、`deepseek-v4-flash` 均返回 200；前三者的上游实际模型名分别为 `anthropic/claude-opus-5-ps-aws-dst`、`MaaS_Cl_Opus_4.8_20260528_cache`、`gpt-5.6-sol`。两个端点的 `/v1/models` 返回同一组 id。
+- **五个模型都走 `/v1/chat/completions`。** `claude-opus-5`、`claude-opus-4-8`、`gpt-5.6-sol`、`deepseek-v4-flash`、`glm-5.3` 均返回 200；前三者的上游实际模型名分别为 `anthropic/claude-opus-5-ps-aws-dst`、`MaaS_Cl_Opus_4.8_20260528_cache`、`gpt-5.6-sol`。两个端点的 `/v1/models` 返回同一组 id。
 - **协议形状。** 接受 `system` 角色、`max_tokens`、顶层 `reasoning_effort`、`strict` 工具、`stream_options.include_usage`；`developer` 角色与 `max_completion_tokens` 也不报错，但按更保守的一侧声明 compat。
 - **推理档位。** 线路接受的取值为 `none`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`（由一次故意的非法值从反序列化错误里读出），逐一探测全部 200。Opus 两款不提供 `minimal`（与官方目录一致）。
 - **`deepseek-v4-flash` 的档位对齐第一方目录。** 它是 DeepSeek-V4-Flash 经中转站转发，因此只声明 DSH 自带 `deepseek-official` 路由为该模型提供的四档：`off`/`low`/`high`/`max`；中转站虽也接受 `minimal`/`medium`/`xhigh`，但一个模型「被提供」哪些档位，应与厂商自己的选择一致。
 - **它的「关闭思考」必须显式送出 `none`。** 完全不带 `reasoning_effort` 时仍返回 `reasoning_content` 且 `reasoning_tokens` 非零，所以留空的 `off` 会是一个什么都不做的开关；`none` 是唯一真能关掉的取值，而 `off` 本身会被 400 拒绝。这一条也写进了测试。
+- **`glm-5.3` 始终思考，因此不提供 `off`。** `low`/`high`/`max` 之外的每一个取值——`none`、`minimal`、`medium`、`xhigh`——都被 400 拒绝，并附上理由「该模型始终思考，不支持关闭思考；请使用 low、high 或 max。」。声明里索性不写 `off`：pi-ai 只在 `reasoningEfforts` 出现某一档时才提供它，于是选择器不会给出一个上游注定拒绝的开关，宿主也会直接拒绝把该模型选到 `off`。
+- **`glm-5.3` 的 `maxTokens` 是 131072。** 更大的值会得到「max_tokens参数非法：限制数值范围[1,131072]」。上下文一侧则以「大海捞针」实测：约 96 万 prompt tokens 仍能准确取回开头埋下的暗号，约 112 万被「Prompt exceeds max length」拒绝，故按 1000000 声明。
 - **端点开关在真实 host 上生效。** 通过设置写入切到 `intl`、再切回 `cn`，两次都由真实会话拿到回答；每个模型各自跑通一次完整轮次。
 - **国际端点可能需要出站代理。** 在开发这个插件的网络环境中，直连 `agentrouter.org:443` 超时（其 DNS 只解析出 IPv6 地址），经本地 HTTP 代理则得 200。这属于网络环境差异，未必适用于每一台机器；见下方「国际端点」。
 
@@ -130,10 +132,10 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 ```bash
 npm ci        # 仅测试所需的 devDependencies
-npm test      # 20 项
+npm test      # 21 项
 ```
 
-克隆后即可跑：20 项中 18 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
+克隆后即可跑：21 项中 19 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
 
 活体测试需要一个可解析的 key，否则自动跳过——因此离线也能跑完整套。key 的来源，按优先级：
 

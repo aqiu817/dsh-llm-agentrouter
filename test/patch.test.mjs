@@ -42,16 +42,15 @@ test('the plugin row is inserted so the fence and the switch actually load', () 
 
 test('every model declares the levels the relay was probed with', () => {
   const ids = route.models.map((model) => model.id)
-  assert.deepEqual(ids, ['claude-opus-5', 'claude-opus-4-8', 'gpt-5.6-sol', 'deepseek-v4-flash'])
+  assert.deepEqual(ids, ['claude-opus-5', 'claude-opus-4-8', 'gpt-5.6-sol', 'deepseek-v4-flash', 'glm-5.3'])
 
   const wire = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
   for (const model of route.models) {
     const levels = Object.entries(model.reasoningEfforts)
     assert.ok(
-      levels.some(([level]) => level === 'off'),
-      `${model.id} must offer Off`,
+      levels.some(([level]) => level !== 'off'),
+      `${model.id} must offer a thinking level`,
     )
-    assert.ok(levels.length > 1, `${model.id} must offer a thinking level`)
     for (const [level, spelling] of levels) {
       if (level === 'off' && spelling === null) continue
       assert.ok(
@@ -59,6 +58,17 @@ test('every model declares the levels the relay was probed with', () => {
         `${model.id}.${level} sends "${spelling}", which the relay's enum does not accept`,
       )
     }
+  }
+})
+
+test('a model offers Off only when the relay lets it stop thinking', () => {
+  // The relay refuses every level outside low/high/max for glm-5.3, naming the
+  // reason: the model always thinks. Withholding `off` is therefore the honest
+  // declaration — offering it would render a switch the upstream rejects.
+  const offers = new Map(route.models.map((model) => [model.id, 'off' in model.reasoningEfforts]))
+  assert.equal(offers.get('glm-5.3'), false)
+  for (const id of ['claude-opus-5', 'claude-opus-4-8', 'gpt-5.6-sol', 'deepseek-v4-flash']) {
+    assert.equal(offers.get(id), true, `${id} was probed with a working Off`)
   }
 })
 

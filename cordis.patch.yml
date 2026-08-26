@@ -121,6 +121,23 @@
               low: low
               high: high
               max: max
+          # This model declares no `off` at all, and that is the honest shape
+          # rather than an omission: every level outside low / high / max — `none`,
+          # `minimal`, `medium`, `xhigh` — is refused with 400 «该模型始终思考，不
+          # 支持关闭思考；请使用 low、high 或 max。». It always thinks. Leaving `off`
+          # out withholds the level, so the picker never offers a switch the
+          # upstream would reject.
+          #
+          # `maxTokens` is the ceiling the relay states for this model: a larger
+          # value comes back as «max_tokens参数非法：限制数值范围[1,131072]».
+          - id: glm-5.3
+            name: GLM 5.3
+            contextWindow: 1000000
+            maxTokens: 131072
+            reasoningEfforts:
+              low: low
+              high: high
+              max: max
 
 # The endpoint switch and the User-Agent fence. Both are one plugin because both
 # are one rewrite of one outbound request, and splitting them would mean two
