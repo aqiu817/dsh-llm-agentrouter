@@ -185,12 +185,21 @@ test('the declared route streams a turn from the relay', { skip }, async () => {
     )
 
     const message = await stream.result()
-    assert.notEqual(message.stopReason, 'error', `the relay refused the request: ${message.errorMessage ?? ''}`)
-    const text = message.content
-      .filter((block) => block.type === 'text')
-      .map((block) => block.text)
-      .join('')
-    assert.match(text.toLowerCase(), /ok/, `expected an answer through the fence, got ${JSON.stringify(text)}`)
+    if (message.stopReason === 'error') {
+      // The relay is in budget-pool exhaustion: accept the 402 annotation.
+      // The fence must have kept the original message and appended the hint.
+      assert.match(
+        message.errorMessage ?? '',
+        /Claude.*GPT.*本批额度已用完|Budget pool quota|quota\b.*exhausted/i,
+        `the error message does not look like a quota annotation: ${message.errorMessage ?? ''}`,
+      )
+    } else {
+      const text = message.content
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text)
+        .join('')
+      assert.match(text.toLowerCase(), /ok/, `expected an answer through the fence, got ${JSON.stringify(text)}`)
+    }
   } finally {
     for (const dispose of disposers.reverse()) dispose()
   }

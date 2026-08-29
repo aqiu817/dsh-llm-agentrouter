@@ -35,6 +35,21 @@ before(async () => {
         path: req.url,
         body,
       })
+      // A relay-style budget-pool exhaustion response, mislabelled as an
+      // event stream exactly as the real relay does, for the 402 tests.
+      if (req.url === '/v1/quota') {
+        res.writeHead(402, { 'content-type': 'text/event-stream' })
+        res.end(
+          '{"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool.","type":"bad_response_status_code","param":"","code":"bad_response_status_code"}}',
+        )
+        return
+      }
+      // A 402 that is not a quota error: the fence must leave it alone.
+      if (req.url === '/v1/not-quota') {
+        res.writeHead(402, { 'content-type': 'text/event-stream' })
+        res.end('{"error":{"message":"some other failure","code":"bad_response_status_code"}}')
+        return
+      }
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end('{"ok":true}')
     })
@@ -203,3 +218,78 @@ test('disposal restores the previous fetch', async () => {
   fence.dispose()
   assert.equal(globalThis.fetch, before_, 'unloading must restore the fetch it replaced')
 })
+test('a relay 402 quota error keeps its message and gains the configured hint', async () => {
+  const HINT = 'Claude / GPT 本批额度已用完，请等待下一批投放。'
+  const fence = await activate({
+    endpoint: 'cn',
+    endpoints: { cn: host, intl: 'unreachable.invalid' },
+    sentinel: SENTINEL,
+    quotaHint: HINT,
+    announce: false,
+  })
+  try {
+    const res = await fetch(`http://${SENTINEL}/v1/quota`, {
+      method: 'POST',
+      headers: { 'user-agent': HARNESS_UA, authorization: 'Bearer test-key', 'content-type': 'application/json' },
+      body: '{"model":"claude-opus-5"}',
+    })
+    assert.equal(res.status, 402, 'the relay status must survive')
+    assert.match(res.headers.get('content-type') ?? '', /application\/json/, 'the mislabelled stream becomes a JSON error')
+    const parsed = await res.json()
+    assert.match(parsed.error.message, /Budget pool quota has been exhausted/, 'the original relay message is kept')
+    assert.ok(parsed.error.message.includes(HINT), 'the configured hint is appended')
+    assert.equal(parsed.error.code, 'bad_response_status_code', 'the rest of the error object survives')
+  } finally {
+    fence.dispose()
+  }
+})
+
+test('a relay 402 that is not a quota error passes through unannotated', async () => {
+  const fence = await activate({
+    endpoint: 'cn',
+    endpoints: { cn: host, intl: 'unreachable.invalid' },
+    sentinel: SENTINEL,
+    quotaHint: 'Claude / GPT 本批额度已用完，请等待下一批投放。',
+    announce: false,
+  })
+  try {
+    const res = await fetch(`http://${SENTINEL}/v1/not-quota`, {
+      method: 'POST',
+      headers: { 'user-agent': HARNESS_UA, authorization: 'Bearer test-key', 'content-type': 'application/json' },
+      body: '{"model":"claude-opus-5"}',
+    })
+    assert.equal(res.status, 402)
+    // The fence rebuilt the body (same bytes) but appended nothing.
+    const parsed = await res.json()
+    assert.equal(parsed.error.message, 'some other failure')
+    assert.ok(!parsed.error.message.includes('本批额度'), 'no hint for a non-quota 402')
+  } finally {
+    fence.dispose()
+  }
+})
+
+test('a blank quotaHint disables the 402 annotation entirely', async () => {
+  const fence = await activate({
+    endpoint: 'cn',
+    endpoints: { cn: host, intl: 'unreachable.invalid' },
+    sentinel: SENTINEL,
+    quotaHint: '',
+    announce: false,
+  })
+  try {
+    const res = await fetch(`http://${SENTINEL}/v1/quota`, {
+      method: 'POST',
+      headers: { 'user-agent': HARNESS_UA, authorization: 'Bearer test-key', 'content-type': 'application/json' },
+      body: '{"model":"claude-opus-5"}',
+    })
+    // The response passes through exactly as the relay sent it.
+    assert.equal(res.status, 402)
+    assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/, 'the mislabelled stream is preserved verbatim')
+    const text = await res.text()
+    assert.match(text, /Budget pool quota has been exhausted/)
+    assert.ok(!text.includes('本批额度'), 'no hint when the field is blank')
+  } finally {
+    fence.dispose()
+  }
+})
+
