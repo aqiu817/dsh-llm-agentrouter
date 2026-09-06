@@ -36,6 +36,24 @@
 
 ## 安装
 
+**从 npm 快速安装**（推荐）：
+
+```bash
+# 1) 装进 profile（本例为 web profile）
+dsh plugin --profile web add dsh-llm-agentrouter
+
+# 2) 存入中转站 key（不写进任何配置文件）
+#    Web 的「模型」设置页可直接写入 ~/.dsh/.credentials.yaml，
+#    或让 AGENTROUTER_API_KEY 存在于进程环境中
+
+# 3) 重启 host。模型选择器里出现 AgentRouter 分组，
+#    「设置 → 插件 → AgentRouter 中转站」出现端点开关
+```
+
+`dsh plugin add` 会从 npm 拉取 `dsh-llm-agentrouter`，并因包声明了 `dsh.bundle` 自动把它纳入 `dsh.profile.bundles` 层（排在 `@deepseek-ai/dsh-base` 之后，其 `llm-pi-ai` 覆盖才生效），无需手动编辑 `~/.dsh/profiles/web/package.json`。
+
+**从源码安装**（开发或本地修改时）：
+
 ```bash
 # 0) 取得源码
 git clone https://github.com/aqiu817/dsh-llm-agentrouter.git
@@ -47,15 +65,12 @@ dsh plugin --profile web add file:/path/to/dsh-llm-agentrouter
 #    dsh.profile.bundles: [..., 'dsh-llm-agentrouter']
 #    必须排在 @deepseek-ai/dsh-base 之后，其 llm-pi-ai 覆盖才生效
 
-# 3) 存入中转站 key（不写进任何配置文件）
-#    Web 的「模型」设置页可直接写入 ~/.dsh/.credentials.yaml，
-#    或让 AGENTROUTER_API_KEY 存在于进程环境中
+# 3) 存入中转站 key（同快速安装第 2 步）
 
-# 4) 重启 host。模型选择器里出现 AgentRouter 分组，
-#    「设置 → 插件 → AgentRouter 中转站」出现端点开关
+# 4) 重启 host（同快速安装第 3 步）
 ```
 
-安装务必用 `file:`（pnpm 复制）而非 `link:`：符号链接下 Node 沿真实路径解析，插件将找不到 `@deepseek-ai/schemastery` 等对等依赖。
+源码安装务必用 `file:`（pnpm 复制）而非 `link:`：符号链接下 Node 沿真实路径解析，插件将找不到 `@deepseek-ai/schemastery` 等对等依赖。
 
 ## 端点切换
 
