@@ -31,7 +31,6 @@
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-settings"
       ],
       "platform": "web"
@@ -51,7 +50,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",
-    "@deepseek-ai/dsh-settings": "*",
+    "@deepseek-ai/dsh-settings": "^0.1.2-rc.1",
     "@deepseek-ai/schemastery": "*"
   },
   "peerDependenciesMeta": {
@@ -66,8 +65,7 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-settings": "0.1.1-rc.2",
-    "@deepseek-ai/schemastery": "3.18.1",
+    "@deepseek-ai/schemastery": "3.18.2",
     "js-yaml": "4.1.0",
     "react": "18.3.1",
     "react-test-renderer": "18.3.1"

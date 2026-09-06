@@ -113,15 +113,15 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 ## 兼容性
 
-本插件在 DSH 宿主进程内运行，`@deepseek-ai/cordis`、`@deepseek-ai/schemastery` 与 `@deepseek-ai/dsh-settings` 都由宿主提供，因此声明为**不限版本且可选**的 `peerDependencies`：插件用到的都是这三个包多个版本里稳定不变的部分，钉死版本只会在宿主升级时凭空造出一次安装失败。下表是已实测跑通的组合，供对照，不是下限：
+本插件在 DSH 宿主进程内运行，`@deepseek-ai/cordis`、`@deepseek-ai/schemastery` 与 `@deepseek-ai/dsh-settings` 都由宿主提供。`dsh-settings` 声明为 `^0.1.2-rc.1` 的可选 peer——插件的设置分节走 `ctx.settings.installSection`，那是 0.1.2 才有的 API；其余两个保持**不限版本且可选**，用到的都是多个版本里稳定不变的部分，钉死版本只会在宿主升级时凭空造出一次安装失败。下表是已实测跑通的组合，供对照，不是下限：
 
 | 依赖 | 已验证版本 |
 | --- | --- |
 | Node.js | 22 |
-| DeepSeek Harness | 0.1.1-rc.2 |
-| `@deepseek-ai/dsh-settings` | 0.1.1-rc.2 |
-| `@deepseek-ai/cordis` | 4.0.1 |
-| `@deepseek-ai/schemastery` | 3.18.1 |
+| DeepSeek Harness | 0.1.2-rc.1 |
+| `@deepseek-ai/dsh-settings` | 0.1.2-rc.1 |
+| `@deepseek-ai/cordis` | 4.0.2 |
+| `@deepseek-ai/schemastery` | 3.18.2 |
 
 浏览器端 bundle 面向宿主静态模块表提供的 React 18；卡片只用 `react` 与 `react/jsx-runtime`，不引入任何额外运行时依赖。
 

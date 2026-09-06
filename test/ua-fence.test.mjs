@@ -64,8 +64,9 @@ after(() => new Promise((resolve) => server.close(resolve)))
  * Activate the plugin with a stub Cordis context and a stub settings service.
  *
  * The stub settings plane is what makes the endpoint observable: it hands the
- * plugin a scope whose `get()` reads a mutable section, exactly as the real
- * service does, so a test can switch endpoints the way the settings card does.
+ * plugin an `installSection` scope whose resolved value reads a mutable
+ * section, exactly as the real service does, so a test can switch endpoints
+ * the way the settings card does.
  *
  * @param {object} overrides - fields overriding the schema defaults.
  * @returns {{dispose: () => void, section: (patch: object) => void}} the handle.
@@ -83,7 +84,10 @@ async function activate(overrides) {
     inject(_services, callback) {
       callback({
         settings: {
-          register: () => ({ get: () => resolved, watch: () => () => {} }),
+          installSection(_owner, _ns, _schema, _entry, hooks) {
+            hooks.setSource(() => resolved)
+            hooks.onChange()
+          },
         },
         effect(fn) {
           disposers.push(fn() ?? (() => {}))
