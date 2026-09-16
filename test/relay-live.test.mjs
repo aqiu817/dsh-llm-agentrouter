@@ -15,7 +15,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 
@@ -43,7 +43,20 @@ function piAiDist() {
 
   const globalModules = join(dirname(process.execPath), '..', 'lib', 'node_modules')
   const bundled = join(globalModules, '@deepseek-ai', 'dsh', 'node_modules', '@earendil-works', 'pi-ai', 'dist')
-  return existsSync(bundled) ? bundled : undefined
+  if (existsSync(bundled)) return bundled
+
+  // The test runner's Node is not necessarily the one dsh was installed
+  // beside; the `dsh` on PATH resolves back to its own package root.
+  try {
+    const { execFileSync } = require_('node:child_process')
+    const bin = execFileSync('sh', ['-c', 'command -v dsh'], { encoding: 'utf8' }).trim()
+    const pkgRoot = join(dirname(realpathSync(bin)), '..')
+    const viaDsh = join(pkgRoot, 'node_modules', '@earendil-works', 'pi-ai', 'dist')
+    if (existsSync(viaDsh)) return viaDsh
+  } catch {
+    // No dsh on PATH; nothing left to try.
+  }
+  return undefined
 }
 
 /**

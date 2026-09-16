@@ -29,8 +29,8 @@
 | `claude-opus-5` | Claude Opus 5 | 1,000,000 | 128,000 | off / low / medium / high / xhigh / max |  |
 | `claude-opus-4-8` | Claude Opus 4.8 | 1,000,000 | 128,000 | off / low / medium / high / xhigh / max |  |
 | `gpt-5.6-sol` | GPT 5.6 Sol | 272,000 | 128,000 | off / minimal / low / medium / high / xhigh / max |  |
+| `gpt-6-astra` | GPT 6 Astra | 272,000 | 128,000 | off / minimal / low / medium / high / xhigh / max | 暂同 GPT 5.6 Sol——该模型上线时 Claude / GPT 预算池恰已耗尽（402），档位与上限未能活体验证，额度刷新后校订 |
 | `deepseek-v4-flash` | DeepSeek V4 Flash | 1,000,000 | 256,000 | off / low / high / max | 档位对齐第一方目录；`off` 送出 `none` 而非留空 |
-| `glm-5.3` | GLM 5.3 | 1,000,000 | 131,072 | low / high / max | 始终思考，不提供关闭选项 |
 
 > 所有模型均走 `/v1/chat/completions`。两个端点的 `/v1/models` 返回同一组 ID。`maxTokens` 上限来自中转站返回值约束，上下文窗口以「大海捞针」实测为准。
 

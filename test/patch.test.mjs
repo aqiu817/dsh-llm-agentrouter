@@ -42,7 +42,7 @@ test('the plugin row is inserted so the fence and the switch actually load', () 
 
 test('every model declares the levels the relay was probed with', () => {
   const ids = route.models.map((model) => model.id)
-  assert.deepEqual(ids, ['claude-opus-5', 'claude-opus-4-8', 'gpt-5.6-sol', 'deepseek-v4-flash', 'glm-5.3'])
+  assert.deepEqual(ids, ['claude-opus-5', 'claude-opus-4-8', 'gpt-5.6-sol', 'gpt-6-astra', 'deepseek-v4-flash'])
 
   const wire = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
   for (const model of route.models) {
@@ -61,14 +61,12 @@ test('every model declares the levels the relay was probed with', () => {
   }
 })
 
-test('a model offers Off only when the relay lets it stop thinking', () => {
-  // The relay refuses every level outside low/high/max for glm-5.3, naming the
-  // reason: the model always thinks. Withholding `off` is therefore the honest
-  // declaration — offering it would render a switch the upstream rejects.
-  const offers = new Map(route.models.map((model) => [model.id, 'off' in model.reasoningEfforts]))
-  assert.equal(offers.get('glm-5.3'), false)
-  for (const id of ['claude-opus-5', 'claude-opus-4-8', 'gpt-5.6-sol', 'deepseek-v4-flash']) {
-    assert.equal(offers.get(id), true, `${id} was probed with a working Off`)
+test('every model in the catalog offers a working Off', () => {
+  // Levels are withheld only where the relay rejects them — the retired glm-5.3
+  // was such a case (it always thinks). No model in the current catalog is:
+  // each declares `off` and was probed with it working.
+  for (const model of route.models) {
+    assert.ok('off' in model.reasoningEfforts, `${model.id} must offer Off`)
   }
 })
 

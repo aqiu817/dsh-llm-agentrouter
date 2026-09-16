@@ -1,6 +1,6 @@
 {
   "name": "dsh-llm-agentrouter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DeepSeek Harness bundle: the AgentRouter relay as one pi-ai route with a domestic/international endpoint switch in Settings, plus the outbound request compatibility the relay requires.",
   "keywords": [
     "deepseek-harness",
