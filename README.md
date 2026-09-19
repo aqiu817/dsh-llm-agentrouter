@@ -3,7 +3,8 @@
 [![test](https://github.com/aqiu817/dsh-llm-agentrouter/actions/workflows/test.yml/badge.svg)](https://github.com/aqiu817/dsh-llm-agentrouter/actions/workflows/test.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-[?](https://img.cdn1.vip/i/6aae264923a5d_1789797961.png)本模组因该原因暂时停更。
+![?](https://img.cdn1.vip/i/6aae264923a5d_1789797961.png)
+本模组因该原因暂时停更。
 
 把 AgentRouter 中转站接入 DeepSeek Harness 的 profile bundle：一条 provider 路由、五个模型及其推理档位，一个在「设置 → 插件」里切换国内 / 国际端点的开关，以及一层让出站请求符合该中转站要求的兼容处理。
 
