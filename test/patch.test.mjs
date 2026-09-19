@@ -77,3 +77,17 @@ test('deepseek-v4-flash can actually stop thinking', () => {
   const efforts = route.models.find((model) => model.id === 'deepseek-v4-flash').reasoningEfforts
   assert.equal(efforts.off, 'none')
 })
+
+test('deepseek-v4-flash declares the DeepSeek thinking protocol explicitly', () => {
+  // The relay serves this model from a DeepSeek-compatible thinking API under
+  // its own hostname, so pi-ai cannot infer the protocol from the URL and the
+  // route has to say it. Without the replay flag, assistant tool-call history
+  // goes out without `reasoning_content` and that upstream rejects the request
+  // — only once a tool call has happened, which is why it hides from fresh
+  // sessions.
+  const compat = route.models.find((model) => model.id === 'deepseek-v4-flash').compat
+  assert.equal(compat?.thinkingFormat, 'deepseek')
+  assert.equal(compat?.requiresReasoningContentOnAssistantMessages, true)
+  assert.equal(compat?.supportsDeveloperRole, false)
+  assert.equal(compat?.supportsStore, false)
+})
