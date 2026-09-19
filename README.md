@@ -4,7 +4,7 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 ![?](https://img.cdn1.vip/i/6aae264923a5d_1789797961.png)
-本模组因该原因暂时停更。
+本模组曾因中转站渠道进入 probation、上游校验不一致而暂停更新。**2.1.0 起恢复维护**：出站请求已能同时满足当前全部上游池（围栏新增直连传输绕过 WAF 质询、工具 schema 补齐 `required`、声明 DeepSeek 思考协议，见下文与致谢）。
 
 把 AgentRouter 中转站接入 DeepSeek Harness 的 profile bundle：一条 provider 路由、五个模型及其推理档位，一个在「设置 → 插件」里切换国内 / 国际端点的开关，以及一层让出站请求符合该中转站要求的兼容处理。
 
