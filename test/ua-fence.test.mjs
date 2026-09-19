@@ -73,7 +73,10 @@ after(() => new Promise((resolve) => server.close(resolve)))
  */
 async function activate(overrides) {
   const { apply, Config } = await import('../lib/index.js')
-  const entry = Config(overrides)
+  // These tests spec the fence's rewrite semantics, which are transport
+  // independent; pin the native path so a proxy-bearing launch environment on
+  // the development machine cannot silently swap the transport underneath them.
+  const entry = Config({ directEndpoints: 'none', ...overrides })
   let resolved = entry
   const disposers = []
   const ctx = {
@@ -104,7 +107,7 @@ async function activate(overrides) {
     },
     /** Replace the resolved section, as a settings write does. */
     section: (patch) => {
-      resolved = Config({ ...overrides, ...patch })
+      resolved = Config({ directEndpoints: 'none', ...overrides, ...patch })
     },
   }
 }

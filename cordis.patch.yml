@@ -133,6 +133,20 @@
             name: DeepSeek V4 Flash
             contextWindow: 1000000
             maxTokens: 256000
+            # The relay routes this model to a DeepSeek-compatible thinking API,
+            # but under its own hostname, so pi-ai cannot infer DeepSeek
+            # compatibility from the URL the way it does for api.deepseek.com —
+            # the protocol has to be declared here. `deepseek` thinkingFormat
+            # sends `thinking` / `reasoning_effort` in DeepSeek's spelling, and
+            # the replay flag carries `reasoning_content` back on assistant
+            # tool-call history, which that upstream requires on every request
+            # whose history contains tool calls: omit it and the upstream
+            # rejects the whole request once a tool call has happened.
+            compat:
+              thinkingFormat: deepseek
+              requiresReasoningContentOnAssistantMessages: true
+              supportsDeveloperRole: false
+              supportsStore: false
             reasoningEfforts:
               off: none
               low: low

@@ -18,6 +18,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const require_ = createRequire(import.meta.url)
 
@@ -111,10 +112,12 @@ const skip =
   key === undefined ? 'no AGENTROUTER_API_KEY' : dist === undefined ? 'pi-ai is not installed' : false
 
 test('the declared route streams a turn from the relay', { skip }, async () => {
-  const { createModels, createProvider } = await import(`${dist}/index.js`)
+  const { createModels, createProvider } = await import(pathToFileURL(join(dist, 'index.js')).href)
   // The lazy factory, exactly as `dsh-llm-pi-ai` resolves it from its protocol
   // table: `createProvider` wants the built streams object, not the module.
-  const { openAICompletionsApi } = await import(`${dist}/api/openai-completions.lazy.js`)
+  const { openAICompletionsApi } = await import(
+    pathToFileURL(join(dist, 'api', 'openai-completions.lazy.js')).href
+  )
   const { apply, Config } = await import('../lib/index.js')
 
   // The fence, activated exactly as the harness activates it: the entry config
