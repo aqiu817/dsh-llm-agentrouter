@@ -61,12 +61,13 @@ before(async () => {
 after(() => new Promise((resolve) => server.close(resolve)))
 
 /**
- * Activate the plugin with a stub Cordis context and a stub settings service.
+ * Activate the plugin with a stub Cordis context.
  *
- * The stub settings plane is what makes the endpoint observable: it hands the
- * plugin an `installSection` scope whose resolved value reads a mutable
- * section, exactly as the real service does, so a test can switch endpoints
- * the way the settings card does.
+ * Since 0.1.7 the plugin closes over its entry config directly — there is no
+ * settings service to inject — so what makes the endpoint observable here is
+ * mutating that same entry object the way a settings write does: the write
+ * either lands in a volatile reference cell or reloads the fiber with a
+ * re-resolved entry, and the next request reads the new value either way.
  *
  * @param {object} overrides - fields overriding the schema defaults.
  * @returns {{dispose: () => void, section: (patch: object) => void}} the handle.
@@ -77,25 +78,10 @@ async function activate(overrides) {
   // independent; pin the native path so a proxy-bearing launch environment on
   // the development machine cannot silently swap the transport underneath them.
   const entry = Config({ directEndpoints: 'none', ...overrides })
-  let resolved = entry
   const disposers = []
   const ctx = {
     effect(fn) {
       disposers.push(fn() ?? (() => {}))
-    },
-    /** The real plugin reaches the settings service through `ctx.inject`. */
-    inject(_services, callback) {
-      callback({
-        settings: {
-          installSection(_owner, _ns, _schema, _entry, hooks) {
-            hooks.setSource(() => resolved)
-            hooks.onChange()
-          },
-        },
-        effect(fn) {
-          disposers.push(fn() ?? (() => {}))
-        },
-      })
     },
     fiber: { state: 2 },
     logger: { info() {}, warn() {} },
@@ -105,9 +91,9 @@ async function activate(overrides) {
     dispose: () => {
       for (const dispose of disposers.reverse()) dispose()
     },
-    /** Replace the resolved section, as a settings write does. */
+    /** Re-resolve the section onto the same object, as a settings write does. */
     section: (patch) => {
-      resolved = Config({ directEndpoints: 'none', ...overrides, ...patch })
+      Object.assign(entry, Config({ directEndpoints: 'none', ...overrides, ...patch }))
     },
   }
 }

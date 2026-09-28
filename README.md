@@ -14,8 +14,8 @@
 | --- | --- | --- |
 | 路由声明 | `cordis.patch.yml` | 覆盖 `llm-pi-ai` 行，声明单条 `agentrouter` 路由，`baseURL` 指向一个哨兵主机 |
 | 端点 + 请求兼容 | `lib/index.js` | 注册 `llm-agentrouter` 设置分节；把哨兵主机改写为所选端点，把 `user-agent` 换成该中转站要求的取值，按端点绕过进程代理直连，并给缺失 `required` 数组的工具 schema 补上空数组（部分上游池按 null 校验并拒绝） |
-| 端点开关 | `lib/client.js` | 浏览器端插件，在「设置 → 插件」渲染国内 / 国际单选卡片 |
-| 行为测试 | `test/` | 38 项：浏览器 bundle 6 项、bundle patch 8 项、改写语义 9 项（含 3 项 402 注释）、直连传输 10 项、工具 schema 补齐 3 项、活体流式 1 项、未经改写必被拒的反向对照 1 项 |
+| 端点开关 | 宿主自动设置页 | 0.1.7 起由宿主把 Config schema 反射成「设置 → 插件」页并直接渲染、写回；`lib/client.js` 仅保留一个惰性占位 |
+| 行为测试 | `test/` | 36 项：浏览器 bundle 4 项、bundle patch 8 项、改写语义 9 项（含 3 项 402 注释）、直连传输 10 项、工具 schema 补齐 3 项、活体流式 1 项、未经改写必被拒的反向对照 1 项 |
 
 ## 为什么是一条路由，而不是两条
 
@@ -86,6 +86,8 @@ llm-agentrouter:
 
 无浏览器时直接编辑该文件即可，语义完全一致；没有设置服务的场景（headless、服务挂载之前）则回落到 bundle 里组合出的入口配置。
 
+**0.1.7 起的实现变化**：0.1.2–0.1.5 的手绘端点卡片（浏览器端 `settingsScope` + `settings.plugin.item` 插槽）随上游移除该服务与插槽而退役。0.1.7 的设置平面自动反射每个已激活 entry 的 Config schema——`endpoint` 字段已标 `.volatile()`（0.1.7 要求显式 opt-in 才进设置表单），由官方设置 UI 自动渲染与写回。volatile 字段在激活时以**引用单元**形态交给插件：设置写入原地更新单元而不重载 fiber，因此围栏每次请求都经 `resolveVolatile` 解包取当前值——「下一次请求生效」的语义不变，且切换无需任何重装。其余字段（endpoints/sentinel/userAgent/directEndpoints/announce）保持 shell/发布层管理，不在设置页暴露。
+
 模型选择器里为何不能直接切？那个菜单不渲染任何子插槽，每个分组只显示 `displayName`，每个模型只显示名称与「适配器提供的描述」——而手工声明的 pi-ai 路由没有可填描述的字段。分组名是唯一可落笔处，但它是名字而不是告示，因此仍写作 `AgentRouter`；解释留在真正能改动它的地方。
 
 ## 国际端点
@@ -127,33 +129,40 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 - **图片输入未声明。** 路由是 `defaultInput: [text]`。探测中转站的图片请求得到超时与 Bedrock 429，未能确认，因此按保守一侧声明：少声明的代价是一次点名该模型的拒绝，多声明的代价是消息已持久化后再被提供方拒绝，会话将不断重试一个不可能成功的请求。
 - **这层兼容处理是进程级的全局替换。** 它按主机分派，对其他主机零影响；但同一进程内若有另一个包装层在它之后安装，卸载时本插件会主动让位，不去夺回全局。
 - **一条凭据服务两个端点。** 因为它们是同一个中转站账号。若两个端点日后使用不同账号，需要拆回两条路由。
-- **浏览器 bundle 是手写的。** 生成它的 `clientBundle` tsdown 预设未发布，所以 `lib/client.js` 直接以加载器的 lazy-CJS 工厂格式写成，样式类名自带前缀而非 CSS module 哈希。测试因此覆盖了通常由构建保证的部分：注册协议、所需模块说明符、两份词典的键一致性。
+- **浏览器 bundle 是手写的。** 生成它的 `clientBundle` tsdown 预设未发布，所以 `lib/client.js` 直接以加载器的 lazy-CJS 工厂格式写成。测试因此覆盖了通常由构建保证的部分：注册协议、惰性占位的形状。
 - **端点切换不影响进行中的请求。** 它在下一次 `fetch` 生效；正在流式返回的那一轮仍走旧端点。
 - **模型选择器里既不能切换，也不作提示。** 见上文；若上游日后给模型条目加上适配器可填的描述字段，或给该菜单开出子插槽，端点状态才可能显示在贴近选择的位置。
 - **Claude / GPT 配额耗尽时以 402 呈现。** 中转站在 Claude / GPT 预算池额度用尽时返回 HTTP 402，且把 JSON 错误体错标成 `text/event-stream`。围栏识别这类响应：保留中转站原始错误信息，并追加 `quotaHint` 提示（默认「Claude / GPT 本批额度已用完，请等待下一批投放。」），让提供方 SDK 把它当作真正的 API 错误而非传输失败。
 
 ## 兼容性
 
-本插件在 DSH 宿主进程内运行，`@deepseek-ai/cordis`、`@deepseek-ai/schemastery` 与 `@deepseek-ai/dsh-settings` 都由宿主提供。`dsh-settings` 声明为 `^0.1.2-rc.1` 的可选 peer——插件的设置分节走 `ctx.settings.installSection`，那是 0.1.2 才有的 API；其余两个保持**不限版本且可选**，用到的都是多个版本里稳定不变的部分，钉死版本只会在宿主升级时凭空造出一次安装失败。下表是已实测跑通的组合，供对照，不是下限：
+本插件在 DSH 宿主进程内运行，`@deepseek-ai/cordis` 与 `@deepseek-ai/schemastery` 由宿主提供，保持**不限版本且可选**——用到的都是多个版本里稳定不变的部分，钉死版本只会在宿主升级时凭空造出一次安装失败。下表是已实测跑通的组合，供对照，不是下限：
 
 | 依赖 | 已验证版本 |
 | --- | --- |
 | Node.js | 22 |
-| DeepSeek Harness | 0.1.2-rc.1 |
-| `@deepseek-ai/dsh-settings` | 0.1.2-rc.1 |
+| DeepSeek Harness | 0.1.7-rc.2 |
 | `@deepseek-ai/cordis` | 4.0.2 |
-| `@deepseek-ai/schemastery` | 3.18.2 |
+| `@deepseek-ai/schemastery` | 3.18.4（devDependencies 与宿主对齐；`.volatile()` 在 3.18.2 上不存在） |
 
-浏览器端 bundle 面向宿主静态模块表提供的 React 18；卡片只用 `react` 与 `react/jsx-runtime`，不引入任何额外运行时依赖。
+浏览器端 bundle 是宿主静态模块表的一员；0.1.7 起浏览器半边是惰性占位，不注入服务、不要求任何模块。
+
+### 版本与 dsh 的对应
+
+| 插件版本 | 适配的 dsh | 说明 |
+| --- | --- | --- |
+| 2.2.1 | 0.1.7+ | 自动设置页 + `.volatile()` 引用单元 |
+| 2.1.0 | 0.1.2 – 0.1.5 | 直连传输 + 工具 schema 补齐；宿主 0.1.5 移除 `settings.installSection` 后宿主半边静默失效 |
+| 0.1.0 | 0.1.1 | 初版 |
 
 ## 开发
 
 ```bash
 npm ci        # 仅测试所需的 devDependencies
-npm test      # 38 项
+npm test      # 36 项
 ```
 
-克隆后即可跑：38 项中 36 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
+克隆后即可跑：36 项中 34 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
 
 活体测试需要一个可解析的 key，否则自动跳过——因此离线也能跑完整套。key 的来源，按优先级：
 

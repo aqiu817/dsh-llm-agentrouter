@@ -1,6 +1,6 @@
 {
   "name": "dsh-llm-agentrouter",
-  "version": "2.1.0",
+  "version": "2.2.1",
   "description": "DeepSeek Harness bundle: the AgentRouter relay as one pi-ai route with a domestic/international endpoint switch in Settings, plus the outbound request compatibility the relay requires.",
   "keywords": [
     "deepseek-harness",
@@ -29,10 +29,7 @@
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "inject": [
-        "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-settings"
-      ],
+      "inject": [],
       "platform": "web"
     }
   },
@@ -50,14 +47,10 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",
-    "@deepseek-ai/dsh-settings": "^0.1.2-rc.1",
     "@deepseek-ai/schemastery": "*"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-settings": {
       "optional": true
     },
     "@deepseek-ai/schemastery": {
@@ -65,7 +58,7 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/schemastery": "3.18.2",
+    "@deepseek-ai/schemastery": "^3.18.4",
     "js-yaml": "4.1.0",
     "react": "18.3.1",
     "react-test-renderer": "18.3.1"
