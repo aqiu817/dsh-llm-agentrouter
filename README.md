@@ -225,18 +225,18 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 ```bash
 npm ci        # 仅测试所需的 devDependencies
-npm test      # 64 项
+npm test      # 65 项
 ```
 
 `lib/route.js` 由 `cordis.patch.yml` 生成，不要手改：
 
 ```bash
-node _gen-route.mjs
+npm run gen-route     # 等价于 node scripts/gen-route.mjs
 ```
 
 `test/route-parity.test.mjs` 会比对两者，改了一处而忘了重跑生成器会被测试拦下。
 
-克隆后即可跑：64 项中 62 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
+克隆后即可跑：65 项中 63 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
 
 
 活体测试需要一个可解析的 key，否则自动跳过——因此离线也能跑完整套。key 的来源，按优先级：
@@ -247,6 +247,15 @@ node _gen-route.mjs
 | `$DSH_HOME/.credentials.yaml` 的 `refs.AGENTROUTER_API_KEY` | dsh 模型设置页写入的位置 |
 
 测试从不打印、记录或断言密钥本身。可用 `AGENTROUTER_ENDPOINT`（`cn`/`intl`）选择活体测试所用端点、`AGENTROUTER_HOST` 直接覆盖主机，用 `DSH_PI_AI_DIST` 指定 pi-ai 的 `dist` 路径（默认按 require 解析，再退回 Node 旁的 dsh 全局安装）。
+
+### 发布
+
+```bash
+npm run publish:dry     # 校验 token + 打包预检，不发出去
+npm run publish:npm     # 真正发布
+```
+
+必须走这个脚本，不要直接 `npm publish`：本机 `~/.npmrc` 的全局 `registry` 指向 `registry.npmmirror.com`（只读镜像），直接发布会打到镜像上并失败；脚本显式指定 `--registry=https://registry.npmjs.org/` 覆盖它。npmjs 的 token 在同一个文件里（`//registry.npmjs.org/:_authToken`），脚本在发布前先校验它，401 时给出替换 token 的指令——npm 自己在这种情况下打印的报错不会说明是这两项设置中的哪一项有问题。
 
 ## 致谢
 

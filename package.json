@@ -45,6 +45,8 @@
   ],
   "scripts": {
     "gen-route": "node scripts/gen-route.mjs",
+    "publish:dry": "node scripts/publish.mjs",
+    "publish:npm": "node scripts/publish.mjs --real",
     "test": "node --test test/*.test.mjs"
   },
   "engines": {
