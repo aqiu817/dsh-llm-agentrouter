@@ -43,7 +43,14 @@ function loadBundle() {
     required.push(specifier)
     // The page builds elements through React and the shared form primitives;
     // the factory only reads these at render time, so inert stand-ins suffice.
-    if (specifier === 'react') return { useState: (value) => [value, () => {}], createElement: () => ({}) }
+    if (specifier === 'react') {
+      return {
+        useState: (value) => [value, () => {}],
+        useCallback: (fn) => fn,
+        useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
+        createElement: () => ({}),
+      }
+    }
     return {}
   })
   return { registered, exports: exports_, required }
@@ -73,7 +80,7 @@ test('the browser half requires the render primitives', () => {
   )
 })
 
-test('apply registers the page while the Host serves the namespace', () => {
+test('apply registers the page into every slot a bundle page can mount it in', () => {
   const { exports } = loadBundle()
   const registered = []
   const injected = []
@@ -88,6 +95,7 @@ test('apply registers the page while the Host serves the namespace', () => {
       bind: () => (key) => key,
     },
     configForms: {
+      get: () => ({ getSnapshot: () => ({ status: 'loading' }), subscribe: () => () => {}, mutate: async () => true }),
       whileServed: (namespaces, register) => {
         watched.push(...namespaces)
         // Serve the namespace, as a mounted Host half does.
@@ -109,11 +117,33 @@ test('apply registers the page while the Host serves the namespace', () => {
 
   exports.apply(ctx)
 
-  assert.deepEqual(watched, [exports.SETTINGS_NS], 'the page follows the namespace the Host half registers')
-  assert.deepEqual(injected, ['plugins.item'], 'the page is a card on the Plugins page')
-  assert.equal(registered.length, 1, 'exactly one page is registered')
-  assert.equal(registered[0].options.id, exports.SETTINGS_NS, 'the entry id is the namespace, so the Host can address it')
-  assert.equal(typeof registered[0].component, 'function', 'the entry renders a component')
+  assert.deepEqual(
+    [...new Set(watched)],
+    [exports.SETTINGS_NS],
+    'every page follows the namespace the Host half registers',
+  )
+  assert.deepEqual(
+    registered.map((r) => r.options.name).sort(),
+    ['plugins.bundle.config', 'plugins.item', 'plugins.row.config'],
+    'the bundle page, the component row page, and the Official-group card are all covered',
+  )
+  for (const row of registered) {
+    assert.equal(typeof row.component, 'function', `${row.options.name} renders a component`)
+    assert.equal(typeof row.options.inject, 'function', `${row.options.name} injects the form controller`)
+  }
+
+  // The bundle page is keyed by the bundle's package name and the row page by
+  // `<bundle>#<rowId>`; both spellings come from the installed bundle, so a
+  // rename in package.json or the patch must be mirrored here.
+  const bundle = registered.find((r) => r.options.name === 'plugins.bundle.config')
+  const row = registered.find((r) => r.options.name === 'plugins.row.config')
+  assert.equal(bundle.options.key, 'dsh-llm-agentrouter')
+  assert.equal(row.options.key, 'dsh-llm-agentrouter#llm-agentrouter')
+
+  // `plugins.bundle.config` receives no `form` argument from the page, so the
+  // controller must arrive through the injection instead.
+  const props = bundle.options.inject('dsh-llm-agentrouter')
+  assert.equal(typeof props.agentRouterForm.getSnapshot, 'function', 'the injected controller is a settings form')
 })
 
 test('the browser half addresses the namespace the Host half registers', () => {
