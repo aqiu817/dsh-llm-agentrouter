@@ -168,9 +168,9 @@ test('the claim hands the loader a config it may keep, not a live reference into
 /**
  * A stub Cordis context recording waterfall listeners.
  *
- * `on` mirrors the loader's `internal/config` waterfall shape: a listener is
- * handed the raw config and a `next` that continues the chain, and its return
- * value replaces the config for the next listener.
+ * `on` mirrors the loader's `internal/config` waterfall shape: each listener is
+ * handed the config and a `next` that yields the value the previous listener
+ * returned, and its own return value becomes the next listener's input.
  *
  * @returns {{ctx: object, resolve: (entry: object, config: object) => object}} the
  *   stub and a driver that runs one resolution for one entry.
@@ -190,21 +190,8 @@ function stubWaterfall() {
     ctx,
     resolve(entry, config) {
       let value = config
-      let started = false
       const scope = { entry }
-      for (const listener of listeners) {
-        listener.call(scope, config, () => {
-          started = true
-          return value
-        })
-      }
-      // Every listener ran; the last one's return value is what survives, which
-      // is what the loader validates.
-      for (const listener of listeners) {
-        const next = () => value
-        value = listener.call(scope, config, next) ?? value
-      }
-      assert.ok(started || listeners.length === 0)
+      for (const listener of listeners) value = listener.call(scope, config, () => value) ?? value
       return value
     },
   }

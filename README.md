@@ -16,7 +16,7 @@
 | 端点 + 请求兼容 | `lib/index.js` | 注册 `llm-agentrouter` 设置分节；把哨兵主机改写为所选端点，把 `user-agent` 换成该中转站要求的取值，按端点绕过进程代理直连，并给缺失 `required` 数组的工具 schema 补上空数组（部分上游池按 null 校验并拒绝） |
 | 路由自愈 | `lib/route.js` | 路由的运行时副本。profile 自己的补丁层会整体覆盖 `llm-pi-ai.providers`（见「桌面端支持」），围栏据此把这条路由重新声明回去 |
 | 端点开关 | 宿主自动设置页 | 0.1.7 起由宿主把 Config schema 反射成「设置 → 插件」页并直接渲染、写回；`lib/client.js` 仅保留一个惰性占位 |
-| 行为测试 | `test/` | 56 项：浏览器 bundle 4 项、bundle patch 8 项、改写语义 9 项（含 3 项 402 注释）、直连传输 10 项、工具 schema 补齐 3 项、静默重试 6 项、路由自愈 10 项、运行时路由与补丁一致 4 项、活体流式 2 项（无 key 时跳过） |
+| 行为测试 | `test/` | 64 项：浏览器 bundle 4 项、bundle patch 8 项、改写语义 9 项（含 3 项 402 注释）、直连传输 10 项、工具 schema 补齐 3 项、静默重试 7 项、路由自愈 17 项、运行时路由与补丁一致 4 项、活体流式 2 项（无 key 时跳过） |
 
 ## 为什么是一条路由，而不是两条
 
@@ -130,6 +130,8 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 **默认关闭**，因为重发只对「中转站能重复服务的请求」免费，而把一个真正的 400 悄悄吞掉，是用一次莫名其妙的空回答换掉一条明确报错。判定刻意保守：只有正文命中 `must be passed back to the API` / `upstream rejected the request as invalid` / `null is not of type "array"` 这类渠道方言的 400 才会重发，其余 400 原样上抛；重发之间按 200ms 递增退避，请求被取消则立即停止并交回最后一个响应。
 
+**正文读不出来时不重发、也不吞掉状态。** 若 400 的正文被截断或连接中途断开，围栏判定为「不可重试」并把原始响应原样交回——此时开关开与关的结果完全一致。这个开关存在的意义是隐藏中转站的渠道抖动，不是隐藏断掉的连接：连自己都没读到的正文，重发也无从判断；而吞掉状态码会把一个可诊断的 400 变成一句无信息的传输错误。这一条有回归测试钉住（`test/silent-retry.test.mjs`），用修复前的实现跑会失败。
+
 ## 桌面端支持
 
 **桌面端（`desktop` profile）的 profile 补丁层会覆盖 `llm-pi-ai.providers`，从而抹掉本插件的路由。** 这不是本插件的 bug，而是加载器的补丁语义：profile 补丁在**所有** bundle 层之后应用，且一个补丁的 `config` 是**整体赋值**而非深合并——只深入一层，所以 `providers` 整个字典被替换。桌面端 profile 自己声明了 `rina` 等 provider，于是 `agentrouter` 这条路由随之消失，每次调用都以 `NO_ADAPTER` 失败。任何自建了第二个中转站的 profile 都有同样的问题（本机 `web` profile 就是如此）。
@@ -211,7 +213,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 ```bash
 npm ci        # 仅测试所需的 devDependencies
-npm test      # 56 项
+npm test      # 64 项
 ```
 
 `lib/route.js` 由 `cordis.patch.yml` 生成，不要手改：
@@ -222,7 +224,7 @@ node _gen-route.mjs
 
 `test/route-parity.test.mjs` 会比对两者，改了一处而忘了重跑生成器会被测试拦下。
 
-克隆后即可跑：56 项中 54 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
+克隆后即可跑：64 项中 62 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
 
 
 活体测试需要一个可解析的 key，否则自动跳过——因此离线也能跑完整套。key 的来源，按优先级：

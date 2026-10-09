@@ -38,7 +38,22 @@ before(async () => {
     req.on('end', () => {
       received.push(body)
       const step = script[Math.min(received.length - 1, script.length - 1)] ?? { status: 200, body: '{"ok":true}' }
-      res.writeHead(step.status, { 'content-type': step.type ?? 'application/json' })
+      const headers = { 'content-type': step.type ?? 'application/json' }
+      // A truncated body: the declared length exceeds what the socket delivers,
+      // so the body read fails after the status and headers have already
+      // arrived. Used to pin what the fence does when it cannot read a response
+      // it has to inspect. The socket is destroyed on a later tick, because
+      // destroying it in this one tears the response down before the caller has
+      // its headers, and the failure would then be undici's rather than the
+      // fence's — which is what this test must not accidentally measure.
+      if (step.truncated === true) {
+        headers['content-length'] = String(Buffer.byteLength(step.body) + 64)
+        res.writeHead(step.status, headers)
+        res.write(step.body)
+        setTimeout(() => res.socket?.destroy(), 10)
+        return
+      }
+      res.writeHead(step.status, headers)
       res.end(step.body)
     })
   })
@@ -205,4 +220,21 @@ test('a settings write turns the switch on without reinstalling the fence', asyn
   } finally {
     disposers.reverse().forEach((dispose) => dispose())
   }
+})
+
+test('a 400 whose body cannot be read is surfaced, not turned into an exception', async () => {
+  // The switch exists to hide the relay's channel flapping, never a broken
+  // connection: re-sending cannot help a body this side never received, and
+  // swallowing the status would replace a diagnosable 400 with an opaque
+  // transport error. With the switch on the outcome must match the switch off.
+  received = []
+  script = [{ status: 400, body: `{"error":{"message":"${DIALECT_REJECTION}"`, truncated: true }]
+  const fence = await activate({ silentRetry: true, silentRetryAttempts: 3 })
+  try {
+    const res = await callRelay()
+    assert.equal(res.status, 400, 'the relay status must survive an unreadable body')
+  } finally {
+    fence.dispose()
+  }
+  assert.equal(received.length, 1, 'an unreadable body must not be re-sent')
 })
