@@ -14,8 +14,9 @@
 | --- | --- | --- |
 | 路由声明 | `cordis.patch.yml` | 覆盖 `llm-pi-ai` 行，声明单条 `agentrouter` 路由，`baseURL` 指向一个哨兵主机 |
 | 端点 + 请求兼容 | `lib/index.js` | 注册 `llm-agentrouter` 设置分节；把哨兵主机改写为所选端点，把 `user-agent` 换成该中转站要求的取值，按端点绕过进程代理直连，并给缺失 `required` 数组的工具 schema 补上空数组（部分上游池按 null 校验并拒绝） |
+| 路由自愈 | `lib/route.js` | 路由的运行时副本。profile 自己的补丁层会整体覆盖 `llm-pi-ai.providers`（见「桌面端支持」），围栏据此把这条路由重新声明回去 |
 | 端点开关 | 宿主自动设置页 | 0.1.7 起由宿主把 Config schema 反射成「设置 → 插件」页并直接渲染、写回；`lib/client.js` 仅保留一个惰性占位 |
-| 行为测试 | `test/` | 36 项：浏览器 bundle 4 项、bundle patch 8 项、改写语义 9 项（含 3 项 402 注释）、直连传输 10 项、工具 schema 补齐 3 项、活体流式 1 项、未经改写必被拒的反向对照 1 项 |
+| 行为测试 | `test/` | 56 项：浏览器 bundle 4 项、bundle patch 8 项、改写语义 9 项（含 3 项 402 注释）、直连传输 10 项、工具 schema 补齐 3 项、静默重试 6 项、路由自愈 10 项、运行时路由与补丁一致 4 项、活体流式 2 项（无 key 时跳过） |
 
 ## 为什么是一条路由，而不是两条
 
@@ -75,6 +76,16 @@ dsh plugin --profile web add file:/path/to/dsh-llm-agentrouter
 
 源码安装务必用 `file:`（pnpm 复制）而非 `link:`：符号链接下 Node 沿真实路径解析，插件将找不到 `@deepseek-ai/schemastery` 等对等依赖。
 
+**桌面端**：profile 名是 `desktop`，安装命令相同，只是要用桌面端自带的 CLI（宿主对 `dsh --profile desktop` 直接拒绝，因为该 profile 由 Electron 应用独占管理）：
+
+```bash
+# Windows 默认安装位置；macOS 把路径换成 .app 内的同名 runtime
+"$LOCALAPPDATA/Programs/DeepSeek Harness/resources/runtime/cli/bin/dsh.cmd" \
+  plugin --profile desktop add dsh-llm-agentrouter
+```
+
+装完重启桌面端即可。桌面端 profile 自己声明了 provider，会覆盖掉本插件的路由，插件在启动时把它重新声明回去——见「桌面端支持」。
+
 ## 端点切换
 
 「设置 → 插件 → AgentRouter 中转站」是唯一入口：两个单选项，各自标注实际主机名，点选即写入，下一次请求生效。它写的是 `~/.dsh/settings.yaml`：
@@ -102,6 +113,37 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 **国内端点则相反，必须绕过代理。** 中转站的 WAF 会质询来自数据中心出口 IP 的请求（代理跳板正是这种出口），回一个 200 的 HTML 验证页而非 SSE 流——在 SDK 眼里就是一次莫名其妙的传输失败。因此围栏对被覆盖的端点自建了直连传输（`lib/direct-fetch.js`）：只要启动环境里存在代理变量，国内端点的请求就不再经过进程代理，默认行为，无需配置。国际端点不受影响，仍然走代理。`directEndpoints: none` 可以关掉这个行为。
 
+## 静默重试
+
+中转站把一个模型 ID 轮询到多个上游渠道，而这些渠道对「历史里的推理内容该怎么回传」要求不一致：DeepSeek 形态的渠道要求每条 assistant 消息带回 `reasoning_content`，Anthropic 形态的渠道要求 `content[].thinking`。同一个请求落到哪个渠道，就决定它被接受还是被拒——因此**同一次请求重发一遍，通常就能成功**。健康度不佳的渠道则直接回 5xx。
+
+对 harness 而言这两类都是终局错误：默认可重试集合是 `EMPTY_RESPONSE / RATE_LIMIT / SERVER / TIMEOUT / TRANSPORT`，**不含 `INVALID_REQUEST`**，而中转站把渠道方言拒绝报成普通 400，于是被归类为 `INVALID_REQUEST`，一次 400 就结束该轮对话。
+
+这正是围栏而不是适配器承担这件事的原因：围栏已经握着序列化好的请求体，能原样重发**同一份字节**——失败属于抽到这个请求的渠道，不属于请求本身。
+
+| 字段 | 默认 | 含义 |
+| --- | --- | --- |
+| `silentRetry` | `false` | 打开后，围栏把中转站的瞬时拒绝（5xx，或正文匹配渠道方言的 400）自行重发，harness 只看到最终结果 |
+| `silentRetryAttempts` | `3` | 单次请求的总发送次数上限（含首次），1–10 |
+
+两个字段都标了 `.volatile()`，因此都在「设置 → 插件」页里，改完下一次请求即生效。
+
+**默认关闭**，因为重发只对「中转站能重复服务的请求」免费，而把一个真正的 400 悄悄吞掉，是用一次莫名其妙的空回答换掉一条明确报错。判定刻意保守：只有正文命中 `must be passed back to the API` / `upstream rejected the request as invalid` / `null is not of type "array"` 这类渠道方言的 400 才会重发，其余 400 原样上抛；重发之间按 200ms 递增退避，请求被取消则立即停止并交回最后一个响应。
+
+## 桌面端支持
+
+**桌面端（`desktop` profile）的 profile 补丁层会覆盖 `llm-pi-ai.providers`，从而抹掉本插件的路由。** 这不是本插件的 bug，而是加载器的补丁语义：profile 补丁在**所有** bundle 层之后应用，且一个补丁的 `config` 是**整体赋值**而非深合并——只深入一层，所以 `providers` 整个字典被替换。桌面端 profile 自己声明了 `rina` 等 provider，于是 `agentrouter` 这条路由随之消失，每次调用都以 `NO_ADAPTER` 失败。任何自建了第二个中转站的 profile 都有同样的问题。
+
+围栏因此在激活时检查该 entry 的实时配置，发现自己的路由被挤掉就把**它自己这一条**重新声明回去：合并进 profile 已有的 provider 字典（不动别人的），通过 `providers` 这个 volatile 字段提交——走的是和设置写入完全相同的路径，适配器在下一次请求即重新注册路由，无需重启。
+
+已验证：静态组合出的配置里 `relay.agentrouter.internal` 确实不存在，运行后路由恢复且 `deepseek-v4-flash` 正常出流；profile 自己的 `rina` 路由全程保留；**profile 文件不被改写**（`noSave`，加载器的写回钩子被尊重），因此 `cordis.patch.yml` 里仍然只有桌面端自己声明的东西。
+
+| 字段 | 默认 | 含义 |
+| --- | --- | --- |
+| `claimRoute` | `true` | 路由被 profile 补丁层挤掉时把它重新声明回去 |
+
+默认开启，否则这个 bundle 恰恰在最需要它的 profile 里静默失效。设 `false` 的用途是：你打算自己管理这条路由，宁可看见冲突，也不希望它被在底下悄悄解决。`claimRoute` 与 `announce` 一样是普通字段，只在激活时读一次——在 profile 补丁里改它会重载 fiber 并重跑自愈，而这本来也是它唯一能起作用的时机。
+
 ## 配置
 
 路由写在 `cordis.patch.yml` 里作为组合 base；用户层 `~/.dsh/settings.yaml` 的 `llm-pi-ai:` 分节按 provider 逐键合并，可覆盖单个字段或增删模型，下一次请求即生效。
@@ -117,6 +159,10 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 | `userAgent` | 见 `lib/index.js` 中的默认值 | 送往中转站的 `User-Agent`。中转站将来若改钉另一个取值，只需改这里，不必改代码 |
 | `announce` | `true` | 激活时在日志里报告一次已装的围栏 |
 | `quotaHint` | `Claude / GPT 本批额度已用完，请等待下一批投放。` | 附加在 402 配额错误信息后的提示文案；空字符串关闭此功能 |
+| `silentRetry` | `false` | 见「静默重试」 |
+| `silentRetryAttempts` | `3` | 见「静默重试」 |
+| `claimRoute` | `true` | 见「桌面端支持」 |
+
 
 ## 密钥安全
 
@@ -133,6 +179,9 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 - **端点切换不影响进行中的请求。** 它在下一次 `fetch` 生效；正在流式返回的那一轮仍走旧端点。
 - **模型选择器里既不能切换，也不作提示。** 见上文；若上游日后给模型条目加上适配器可填的描述字段，或给该菜单开出子插槽，端点状态才可能显示在贴近选择的位置。
 - **Claude / GPT 配额耗尽时以 402 呈现。** 中转站在 Claude / GPT 预算池额度用尽时返回 HTTP 402，且把 JSON 错误体错标成 `text/event-stream`。围栏识别这类响应：保留中转站原始错误信息，并追加 `quotaHint` 提示（默认「Claude / GPT 本批额度已用完，请等待下一批投放。」），让提供方 SDK 把它当作真正的 API 错误而非传输失败。
+- **静默重试不是重试策略。** 它只重发中转站自己的瞬时拒绝，靠的是「下一次抽到另一个渠道」；它不处理超时、限流、凭证错误，也不与 dsh 自己的 `llm-retry` 策略叠加。打开它并不改变 400 在 harness 里的分类，只是让这类 400 根本到不了 harness。
+- **路由自愈只补自己这一条。** 它把 `agentrouter` 合并进 profile 已声明的 provider 字典，不重排、不删除、不改动别人的字段；如果 profile 把 `providers` 写成了非字典，它会报告 `unusable` 而不是覆盖掉——那是 profile 的问题，应当被看见。
+- **桌面端仍受上游 profile 管理方式约束。** `desktop` profile 由 Electron 应用独占管理（宿主对 `dsh --profile desktop` 直接拒绝），自愈因此在进程内完成，不触碰任何磁盘文件；桌面端的 profile 补丁由应用自己维护，本插件不介入。
 
 ## 兼容性
 
@@ -141,7 +190,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 | 依赖 | 已验证版本 |
 | --- | --- |
 | Node.js | 22 |
-| DeepSeek Harness | 0.1.7-rc.2 |
+| DeepSeek Harness | 0.2.0-rc.2（含桌面端 Electron 运行时 0.2.0-rc.2） |
 | `@deepseek-ai/cordis` | 4.0.2 |
 | `@deepseek-ai/schemastery` | 3.18.4（devDependencies 与宿主对齐；`.volatile()` 在 3.18.2 上不存在） |
 
@@ -151,6 +200,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 | 插件版本 | 适配的 dsh | 说明 |
 | --- | --- | --- |
+| 2.3.0 | 0.1.7+ / 0.2.x | 静默重试开关 + 桌面端支持（profile 覆盖路由时自愈） |
 | 2.2.1 | 0.1.7+ | 自动设置页 + `.volatile()` 引用单元 |
 | 2.1.0 | 0.1.2 – 0.1.5 | 直连传输 + 工具 schema 补齐；宿主 0.1.5 移除 `settings.installSection` 后宿主半边静默失效 |
 | 0.1.0 | 0.1.1 | 初版 |
@@ -159,10 +209,19 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 ```bash
 npm ci        # 仅测试所需的 devDependencies
-npm test      # 36 项
+npm test      # 56 项
 ```
 
-克隆后即可跑：36 项中 34 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
+`lib/route.js` 由 `cordis.patch.yml` 生成，不要手改：
+
+```bash
+node _gen-route.mjs
+```
+
+`test/route-parity.test.mjs` 会比对两者，改了一处而忘了重跑生成器会被测试拦下。
+
+克隆后即可跑：56 项中 54 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
+
 
 活体测试需要一个可解析的 key，否则自动跳过——因此离线也能跑完整套。key 的来源，按优先级：
 
