@@ -62,8 +62,14 @@ console.log(`publish: ${pkg.name}@${pkg.version} -> ${REGISTRY}${real ? '' : ' (
 // publish to the mirror and fail on a read-only registry.
 const args = ['publish', `--registry=${REGISTRY}`];
 if (!real) args.push('--dry-run');
+// npm ships as `npm.cmd` on Windows, which cannot be launched by execFile
+// without a shell; going through cmd.exe keeps the args array un-concatenated,
+// where `shell: true` would join them into one string (DEP0190).
+const [file, argv] = process.platform === 'win32'
+  ? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'npm', ...args]]
+  : ['npm', args];
 try {
-  execFileSync('npm', args, { stdio: 'inherit', shell: process.platform === 'win32' });
+  execFileSync(file, argv, { stdio: 'inherit' });
 } catch {
   fail('npm publish failed');
 }
