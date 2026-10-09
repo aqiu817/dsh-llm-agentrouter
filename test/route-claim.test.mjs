@@ -5,12 +5,21 @@
  * `llm-pi-ai.providers` dict rather than merging into it, so a profile that
  * declares a provider of its own — the shipped `desktop` profile does — leaves
  * this bundle's route with no adapter and every `agentrouter` call failing
- * `NO_ADAPTER`. These tests drive the claim against a stub loader entry, which
- * is the only thing it touches.
+ * `NO_ADAPTER`.
  *
- * What needs proving: a displaced route is re-added *and the profile's own
- * routes survive it*, an intact route is left alone, a route the profile
- * genuinely redefined is not fought over, and nothing is written back to disk.
+ * Two mechanisms, and the split matters. `withRelayRoute` is the merge itself,
+ * applied through `watchRelayRoute` on every resolution of the `llm-pi-ai`
+ * config; that is what keeps the route present for the whole session, because
+ * the host re-reads the profile patch file shortly after boot and rebuilds every
+ * entry from it — a single write is reverted there, invisibly, after the first
+ * request has already succeeded. `claimRelayRoute` is only the early nudge that
+ * forces one resolution at activation, since `llm-pi-ai` has already registered
+ * its routes by then.
+ *
+ * What needs proving: a displaced route is merged back *and the profile's own
+ * routes survive it*, a route the profile genuinely redefined is not fought
+ * over, the merge is idempotent so a repeated resolution cannot grow the config,
+ * and the hook only touches the entry it owns.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -154,4 +163,109 @@ test('the claim hands the loader a config it may keep, not a live reference into
   const handed = entry.options.config.providers.agentrouter
   assert.notEqual(handed, AGENTROUTER_ROUTE, 'the module value must not be mutated by a later edit')
   assert.deepEqual(handed, AGENTROUTER_ROUTE)
+})
+
+/**
+ * A stub Cordis context recording waterfall listeners.
+ *
+ * `on` mirrors the loader's `internal/config` waterfall shape: a listener is
+ * handed the raw config and a `next` that continues the chain, and its return
+ * value replaces the config for the next listener.
+ *
+ * @returns {{ctx: object, resolve: (entry: object, config: object) => object}} the
+ *   stub and a driver that runs one resolution for one entry.
+ */
+function stubWaterfall() {
+  const listeners = []
+  const ctx = {
+    on(name, listener) {
+      assert.equal(name, 'internal/config')
+      listeners.push(listener)
+      return () => {
+        listeners.splice(listeners.indexOf(listener), 1)
+      }
+    },
+  }
+  return {
+    ctx,
+    resolve(entry, config) {
+      let value = config
+      let started = false
+      const scope = { entry }
+      for (const listener of listeners) {
+        listener.call(scope, config, () => {
+          started = true
+          return value
+        })
+      }
+      // Every listener ran; the last one's return value is what survives, which
+      // is what the loader validates.
+      for (const listener of listeners) {
+        const next = () => value
+        value = listener.call(scope, config, next) ?? value
+      }
+      assert.ok(started || listeners.length === 0)
+      return value
+    },
+  }
+}
+
+test('the resolution hook merges the route back into a displaced providers dict', async () => {
+  const { watchRelayRoute } = await import('../lib/index.js')
+  const { ctx, resolve } = stubWaterfall()
+  watchRelayRoute(ctx)
+  const entry = { options: { id: PI_AI_ID, name: PI_AI_NAME } }
+  const out = resolve(entry, { providers: { rina: { api: 'openai-completions', models: [{ id: 'x' }] } } })
+  assert.deepEqual(Object.keys(out.providers).sort(), ['agentrouter', 'rina'])
+  assert.equal(out.providers.agentrouter.apiKeyEnv, 'AGENTROUTER_API_KEY')
+})
+
+test('the resolution hook is idempotent across repeated resolutions', async () => {
+  const { watchRelayRoute } = await import('../lib/index.js')
+  const { ctx, resolve } = stubWaterfall()
+  watchRelayRoute(ctx)
+  const entry = { options: { id: PI_AI_ID, name: PI_AI_NAME } }
+  const first = resolve(entry, { providers: {} })
+  const second = resolve(entry, first)
+  const third = resolve(entry, second)
+  assert.deepEqual(Object.keys(third.providers), ['agentrouter'])
+  assert.deepEqual(third.providers.agentrouter, first.providers.agentrouter)
+})
+
+test('the resolution hook leaves an entry it does not own untouched', async () => {
+  const { watchRelayRoute } = await import('../lib/index.js')
+  const { ctx, resolve } = stubWaterfall()
+  watchRelayRoute(ctx)
+  const other = { options: { id: 'llm-deepseek', name: '@deepseek-ai/dsh-llm-deepseek' } }
+  const config = { providers: {} }
+  assert.equal(resolve(other, config), config, 'an unrelated entry must be passed through by identity')
+})
+
+test('the resolution hook ignores an entry reusing the id under another name', async () => {
+  const { watchRelayRoute } = await import('../lib/index.js')
+  const { ctx, resolve } = stubWaterfall()
+  watchRelayRoute(ctx)
+  const impostor = { options: { id: PI_AI_ID, name: '@example/not-pi-ai' } }
+  const config = { providers: {} }
+  assert.equal(resolve(impostor, config), config)
+})
+
+test('the resolution hook does not fight a route the profile declared itself', async () => {
+  const { watchRelayRoute } = await import('../lib/index.js')
+  const { ctx, resolve } = stubWaterfall()
+  watchRelayRoute(ctx)
+  const entry = { options: { id: PI_AI_ID, name: PI_AI_NAME } }
+  const mine = { displayName: 'Renamed by the deployment', models: [{ id: 'only' }] }
+  const out = resolve(entry, { providers: { agentrouter: mine } })
+  assert.equal(out.providers.agentrouter, mine, 'the deployment value must stand')
+})
+
+test('the hook is disposed with its fiber, so a reload does not stack listeners', async () => {
+  const { watchRelayRoute } = await import('../lib/index.js')
+  const { ctx, resolve } = stubWaterfall()
+  const dispose = watchRelayRoute(ctx)
+  dispose()
+  const entry = { options: { id: PI_AI_ID, name: PI_AI_NAME } }
+  const config = { providers: {} }
+  assert.equal(resolve(entry, config), config, 'after disposal the hook must not merge anything')
 })

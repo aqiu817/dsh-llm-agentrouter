@@ -132,17 +132,19 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 ## 桌面端支持
 
-**桌面端（`desktop` profile）的 profile 补丁层会覆盖 `llm-pi-ai.providers`，从而抹掉本插件的路由。** 这不是本插件的 bug，而是加载器的补丁语义：profile 补丁在**所有** bundle 层之后应用，且一个补丁的 `config` 是**整体赋值**而非深合并——只深入一层，所以 `providers` 整个字典被替换。桌面端 profile 自己声明了 `rina` 等 provider，于是 `agentrouter` 这条路由随之消失，每次调用都以 `NO_ADAPTER` 失败。任何自建了第二个中转站的 profile 都有同样的问题。
+**桌面端（`desktop` profile）的 profile 补丁层会覆盖 `llm-pi-ai.providers`，从而抹掉本插件的路由。** 这不是本插件的 bug，而是加载器的补丁语义：profile 补丁在**所有** bundle 层之后应用，且一个补丁的 `config` 是**整体赋值**而非深合并——只深入一层，所以 `providers` 整个字典被替换。桌面端 profile 自己声明了 `rina` 等 provider，于是 `agentrouter` 这条路由随之消失，每次调用都以 `NO_ADAPTER` 失败。任何自建了第二个中转站的 profile 都有同样的问题（本机 `web` profile 就是如此）。
 
-围栏因此在激活时检查该 entry 的实时配置，发现自己的路由被挤掉就把**它自己这一条**重新声明回去：合并进 profile 已有的 provider 字典（不动别人的），通过 `providers` 这个 volatile 字段提交——走的是和设置写入完全相同的路径，适配器在下一次请求即重新注册路由，无需重启。
+围栏把**自己这一条**路由合并回去：并入 profile 已有的 provider 字典（不动别人的，也不覆盖 profile 自己声明的同名路由）。合并发生在**配置解析期**，而不是往 entry 里写一次。
 
-已验证：静态组合出的配置里 `relay.agentrouter.internal` 确实不存在，运行后路由恢复且 `deepseek-v4-flash` 正常出流；profile 自己的 `rina` 路由全程保留；**profile 文件不被改写**（`noSave`，加载器的写回钩子被尊重），因此 `cordis.patch.yml` 里仍然只有桌面端自己声明的东西。
+这不是实现偏好，是必须如此：宿主在启动后几秒会重新读取 profile 补丁文件并据其重建 entry（`dsh-hmr` 的 profile 监视），**一次性写入会被它原样抹掉**——而且是在第一轮请求已经成功之后，所以表面上完全看不出来。挂在解析链上的合并没有可被抹回的持久状态，因此长期有效。附带的一次性写入只用来触发一次早期解析：`llm-pi-ai` 属于 base bundle，激活早于本插件，插件到位时它已经注册完路由了。
+
+已验证（0.2.0-rc.2 的 web 宿主，`patchReload: live`）：静态组合出的配置里 `relay.agentrouter.internal` 确实不存在；启动后路由恢复，并且在宿主的 profile 重建（约 2–4 秒）之后、以及启动 65 秒后仍然存在，`deepseek-v4-flash` 正常出流；profile 自己的 `rina` 路由全程保留；**profile 文件不被改写**，`cordis.patch.yml` 里仍然只有 profile 自己声明的东西。
 
 | 字段 | 默认 | 含义 |
 | --- | --- | --- |
 | `claimRoute` | `true` | 路由被 profile 补丁层挤掉时把它重新声明回去 |
 
-默认开启，否则这个 bundle 恰恰在最需要它的 profile 里静默失效。设 `false` 的用途是：你打算自己管理这条路由，宁可看见冲突，也不希望它被在底下悄悄解决。`claimRoute` 与 `announce` 一样是普通字段，只在激活时读一次——在 profile 补丁里改它会重载 fiber 并重跑自愈，而这本来也是它唯一能起作用的时机。
+默认开启，否则这个 bundle 恰恰在最需要它的 profile 里静默失效。设 `false` 的用途是：你打算自己管理这条路由，宁可看见冲突，也不希望它被在底下悄悄解决。`claimRoute` 与 `announce` 一样是普通字段，只在激活时读一次——在 profile 补丁里改它会重载 fiber 并重挂解析钩子，而这本来也是它唯一能起作用的时机。
 
 ## 配置
 
