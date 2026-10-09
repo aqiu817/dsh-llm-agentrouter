@@ -63,7 +63,7 @@ dsh plugin --profile web add dsh-llm-agentrouter
 git clone https://github.com/aqiu817/dsh-llm-agentrouter.git
 
 # 1) 装进 profile（本例为 web profile）
-dsh plugin --profile web add file:/path/to/dsh-llm-agentrouter
+dsh plugin --profile web add link:/path/to/dsh-llm-agentrouter
 
 # 2) 把它列入 bundle 顺序（编辑 ~/.dsh/profiles/web/package.json）
 #    dsh.profile.bundles: [..., 'dsh-llm-agentrouter']
@@ -74,7 +74,7 @@ dsh plugin --profile web add file:/path/to/dsh-llm-agentrouter
 # 4) 重启 host（同快速安装第 3 步）
 ```
 
-源码安装务必用 `file:`（pnpm 复制）而非 `link:`：符号链接下 Node 沿真实路径解析，插件将找不到 `@deepseek-ai/schemastery` 等对等依赖。
+源码安装建议用 `link:`（pnpm 符号链接），这样改源码立刻生效；`file:` 在 `nodeLinker: hoisted` 下是**复制**，改了源码不会传播，容易误以为修复没生效。两种方式都能解析对等依赖：本仓库自带 `node_modules/@deepseek-ai/schemastery`，符号链接下 Node 沿真实路径解析时正好落在它上面。
 
 **桌面端**：profile 名是 `desktop`，安装命令相同，只是要用桌面端自带的 CLI（宿主对 `dsh --profile desktop` 直接拒绝，因为该 profile 由 Electron 应用独占管理）：
 
@@ -88,7 +88,7 @@ dsh plugin --profile web add file:/path/to/dsh-llm-agentrouter
 
 ## 端点切换
 
-入口是侧边栏「插件」页里的 **AgentRouter 中转站** 卡片（不是「设置 → 内置插件」，那里只有只读清单）：一个国内 / 国际分段控件、一个静默重试开关、一个最大尝试次数输入框，点「保存」写入。
+入口是侧边栏「插件」页里的 **AgentRouter 中转站** 卡片（不是「设置 → 内置插件」，那里只有只读清单）：一个国内 / 国际分段控件、一个静默重试开关、一个最大尝试次数输入框，点「保存」写入。点开 `dsh-llm-agentrouter` 这张 bundle 卡片的详情页，同一个表单也出现在那里。
 
 它写的是 **profile 的补丁文件**，即 `$DSH_HOME/profiles/<profile>/cordis.patch.yml` 中本插件那一行：
 
@@ -101,7 +101,11 @@ dsh plugin --profile web add file:/path/to/dsh-llm-agentrouter
 
 无浏览器时直接编辑该文件即可，语义完全一致。
 
-**0.1.7 起设置页的注册方式**：0.1.2–0.1.5 的手绘卡片走浏览器端 `settingsScope` + `settings.plugin.item`，随上游移除这两个而退役。0.1.7 起 `settings.describe` 会为每个已激活 entry 报告一份表单，并带 `autoGenerate` 标志——但该标志的文档写明是「给从 schema 构建页面的客户端用」，而**当前发布的客户端没有一个这样做**。因此仅把 `endpoint` 标成 `.volatile()` 并不会让页面出现，浏览器半边必须像官方配套设置页那样显式注册：`configForms.whileServed` 守住命名空间，`slots.register` 挂到「插件」页的 `plugins.item` 插槽。本版即按此实现。
+**0.1.7 起设置页的注册方式**：0.1.2–0.1.5 的手绘卡片走浏览器端 `settingsScope` + `settings.plugin.item`，随上游移除这两个而退役。0.1.7 起 `settings.describe` 会为每个已激活 entry 报告一份表单，并带 `autoGenerate` 标志——但该标志的文档写明是「给从 schema 构建页面的客户端用」，而**当前发布的客户端没有一个这样做**。因此仅把 `endpoint` 标成 `.volatile()` 并不会让页面出现，浏览器半边必须像官方配套设置页那样显式注册。
+
+「插件」页把一个 bundle 的配置分成三个插槽，光注册一个是不够的：`plugins.bundle.config` 按 **bundle 包名** 取键，画的是点开 bundle 卡片后的详情页；`plugins.row.config` 按 `<bundle>#<rowId>` 取键，画的是组件行的详情页；`plugins.item` 是列表插槽，会在「官方」组里额外造一张独立卡片。三者都经 `configForms.whileServed([SETTINGS_NS], …)` 守住命名空间，宿主没挂载 Host 半边时页面不出现。本版三个都注册。
+
+表单控制器以**注入属性** `agentRouterForm` 到达组件，而不是取页面自带的 `form` 参数——`plugins.bundle.config` 根本不会传这个参数，注入一份控制器让三处挂载共用同一条代码路径。`settings.describe` 尚未回答时组件渲染「正在读取设置…」，避免对着 undefined 画控件。
 
 volatile 字段在激活时以**引用单元**形态交给插件：设置写入原地更新单元而不重载 fiber，因此围栏每次请求都经 `resolveVolatile` 解包取当前值——「下一次请求生效」的语义不变，且切换无需任何重装。其余字段（endpoints/sentinel/userAgent/directEndpoints/announce）保持 shell/发布层管理，不在设置页暴露。
 
@@ -211,7 +215,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 | 插件版本 | 适配的 dsh | 说明 |
 | --- | --- | --- |
-| 2.4.0 | 0.2.x | 设置页改为显式注册（`plugins.item` 插槽）；端点 + 静默重试 + 尝试次数 |
+| 2.4.0 | 0.2.x | 设置页显式注册到全部三个插槽（`plugins.bundle.config` / `plugins.row.config` / `plugins.item`）；端点 + 静默重试 + 尝试次数 |
 | 2.3.0 | 0.1.7+ / 0.2.x | 静默重试开关 + 桌面端支持（profile 覆盖路由时自愈） |
 | 2.2.1 | 0.1.7+ | 依赖 `autoGenerate` 自动页 + `.volatile()` 引用单元；宿主客户端不渲染 schema 自动页，故设置入口实际不可见 |
 | 2.1.0 | 0.1.2 – 0.1.5 | 直连传输 + 工具 schema 补齐；宿主 0.1.5 移除 `settings.installSection` 后宿主半边静默失效 |
