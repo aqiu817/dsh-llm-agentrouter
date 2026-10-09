@@ -15,8 +15,8 @@
 | 路由声明 | `cordis.patch.yml` | 覆盖 `llm-pi-ai` 行，声明单条 `agentrouter` 路由，`baseURL` 指向一个哨兵主机 |
 | 端点 + 请求兼容 | `lib/index.js` | 注册 `llm-agentrouter` 设置分节；把哨兵主机改写为所选端点，把 `user-agent` 换成该中转站要求的取值，按端点绕过进程代理直连，并给缺失 `required` 数组的工具 schema 补上空数组（部分上游池按 null 校验并拒绝） |
 | 路由自愈 | `lib/route.js` | 路由的运行时副本。profile 自己的补丁层会整体覆盖 `llm-pi-ai.providers`（见「桌面端支持」），围栏据此把这条路由重新声明回去 |
-| 端点开关 | 宿主自动设置页 | 0.1.7 起由宿主把 Config schema 反射成「设置 → 插件」页并直接渲染、写回；`lib/client.js` 仅保留一个惰性占位 |
-| 行为测试 | `test/` | 64 项：浏览器 bundle 4 项、bundle patch 8 项、改写语义 9 项（含 3 项 402 注释）、直连传输 10 项、工具 schema 补齐 3 项、静默重试 7 项、路由自愈 17 项、运行时路由与补丁一致 4 项、活体流式 2 项（无 key 时跳过） |
+| 端点开关 + 重试开关 | `lib/client.js` | 注册「插件」页里的 AgentRouter 卡片：端点分段控件、静默重试开关、最大尝试次数。设置数据由宿主 `settings.describe` 提供，写入走 `configForms` 的 `mutate` |
+| 行为测试 | `test/` | 65 项：浏览器 bundle 5 项、bundle patch 8 项、改写语义 9 项（含 3 项 402 注释）、直连传输 10 项、工具 schema 补齐 3 项、静默重试 7 项、路由自愈 17 项、运行时路由与补丁一致 4 项、活体流式 2 项（无 key 时跳过） |
 
 ## 为什么是一条路由，而不是两条
 
@@ -88,16 +88,22 @@ dsh plugin --profile web add file:/path/to/dsh-llm-agentrouter
 
 ## 端点切换
 
-「设置 → 插件 → AgentRouter 中转站」是唯一入口：两个单选项，各自标注实际主机名，点选即写入，下一次请求生效。它写的是 `~/.dsh/settings.yaml`：
+入口是侧边栏「插件」页里的 **AgentRouter 中转站** 卡片（不是「设置 → 内置插件」，那里只有只读清单）：一个国内 / 国际分段控件、一个静默重试开关、一个最大尝试次数输入框，点「保存」写入。
+
+它写的是 **profile 的补丁文件**，即 `$DSH_HOME/profiles/<profile>/cordis.patch.yml` 中本插件那一行：
 
 ```yaml
-llm-agentrouter:
-  endpoint: cn   # 或 intl
+- id: llm-agentrouter
+  name: dsh-llm-agentrouter
+  config:
+    endpoint: cn   # 或 intl
 ```
 
-无浏览器时直接编辑该文件即可，语义完全一致；没有设置服务的场景（headless、服务挂载之前）则回落到 bundle 里组合出的入口配置。
+无浏览器时直接编辑该文件即可，语义完全一致。
 
-**0.1.7 起的实现变化**：0.1.2–0.1.5 的手绘端点卡片（浏览器端 `settingsScope` + `settings.plugin.item` 插槽）随上游移除该服务与插槽而退役。0.1.7 的设置平面自动反射每个已激活 entry 的 Config schema——`endpoint` 字段已标 `.volatile()`（0.1.7 要求显式 opt-in 才进设置表单），由官方设置 UI 自动渲染与写回。volatile 字段在激活时以**引用单元**形态交给插件：设置写入原地更新单元而不重载 fiber，因此围栏每次请求都经 `resolveVolatile` 解包取当前值——「下一次请求生效」的语义不变，且切换无需任何重装。其余字段（endpoints/sentinel/userAgent/directEndpoints/announce）保持 shell/发布层管理，不在设置页暴露。
+**0.1.7 起设置页的注册方式**：0.1.2–0.1.5 的手绘卡片走浏览器端 `settingsScope` + `settings.plugin.item`，随上游移除这两个而退役。0.1.7 起 `settings.describe` 会为每个已激活 entry 报告一份表单，并带 `autoGenerate` 标志——但该标志的文档写明是「给从 schema 构建页面的客户端用」，而**当前发布的客户端没有一个这样做**。因此仅把 `endpoint` 标成 `.volatile()` 并不会让页面出现，浏览器半边必须像官方配套设置页那样显式注册：`configForms.whileServed` 守住命名空间，`slots.register` 挂到「插件」页的 `plugins.item` 插槽。本版即按此实现。
+
+volatile 字段在激活时以**引用单元**形态交给插件：设置写入原地更新单元而不重载 fiber，因此围栏每次请求都经 `resolveVolatile` 解包取当前值——「下一次请求生效」的语义不变，且切换无需任何重装。其余字段（endpoints/sentinel/userAgent/directEndpoints/announce）保持 shell/发布层管理，不在设置页暴露。
 
 模型选择器里为何不能直接切？那个菜单不渲染任何子插槽，每个分组只显示 `displayName`，每个模型只显示名称与「适配器提供的描述」——而手工声明的 pi-ai 路由没有可填描述的字段。分组名是唯一可落笔处，但它是名字而不是告示，因此仍写作 `AgentRouter`；解释留在真正能改动它的地方。
 
@@ -179,7 +185,8 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 - **图片输入未声明。** 路由是 `defaultInput: [text]`。探测中转站的图片请求得到超时与 Bedrock 429，未能确认，因此按保守一侧声明：少声明的代价是一次点名该模型的拒绝，多声明的代价是消息已持久化后再被提供方拒绝，会话将不断重试一个不可能成功的请求。
 - **这层兼容处理是进程级的全局替换。** 它按主机分派，对其他主机零影响；但同一进程内若有另一个包装层在它之后安装，卸载时本插件会主动让位，不去夺回全局。
 - **一条凭据服务两个端点。** 因为它们是同一个中转站账号。若两个端点日后使用不同账号，需要拆回两条路由。
-- **浏览器 bundle 是手写的。** 生成它的 `clientBundle` tsdown 预设未发布，所以 `lib/client.js` 直接以加载器的 lazy-CJS 工厂格式写成。测试因此覆盖了通常由构建保证的部分：注册协议、惰性占位的形状。
+- **浏览器 bundle 是手写的。** 生成它的 `clientBundle` tsdown 预设未发布，所以 `lib/client.js` 直接以加载器的 lazy-CJS 工厂格式写成。测试因此覆盖了通常由构建保证的部分：注册协议、导出形状、以及「插件」页插槽的注册。
+- **设置页只在宿主提供该命名空间时出现。** 页面通过 `configForms.whileServed(['llm-agentrouter'])` 注册，未组合宿主半边（或命名空间被禁用）的部署里不会出现这张卡片，也不会留下痕迹。
 - **端点切换不影响进行中的请求。** 它在下一次 `fetch` 生效；正在流式返回的那一轮仍走旧端点。
 - **模型选择器里既不能切换，也不作提示。** 见上文；若上游日后给模型条目加上适配器可填的描述字段，或给该菜单开出子插槽，端点状态才可能显示在贴近选择的位置。
 - **Claude / GPT 配额耗尽时以 402 呈现。** 中转站在 Claude / GPT 预算池额度用尽时返回 HTTP 402，且把 JSON 错误体错标成 `text/event-stream`。围栏识别这类响应：保留中转站原始错误信息，并追加 `quotaHint` 提示（默认「Claude / GPT 本批额度已用完，请等待下一批投放。」），让提供方 SDK 把它当作真正的 API 错误而非传输失败。
@@ -198,14 +205,15 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 | `@deepseek-ai/cordis` | 4.0.2 |
 | `@deepseek-ai/schemastery` | 3.18.4（devDependencies 与宿主对齐；`.volatile()` 在 3.18.2 上不存在） |
 
-浏览器端 bundle 是宿主静态模块表的一员；0.1.7 起浏览器半边是惰性占位，不注入服务、不要求任何模块。
+浏览器端 bundle 是宿主静态模块表的一员；它从 `react` 与 `@deepseek-ai/dsh-client-ui-primitives` 取渲染原语，二者都在宿主的平台 seed 表里，因此无需 `dsh.client.external` 声明。
 
 ### 版本与 dsh 的对应
 
 | 插件版本 | 适配的 dsh | 说明 |
 | --- | --- | --- |
+| 2.4.0 | 0.2.x | 设置页改为显式注册（`plugins.item` 插槽）；端点 + 静默重试 + 尝试次数 |
 | 2.3.0 | 0.1.7+ / 0.2.x | 静默重试开关 + 桌面端支持（profile 覆盖路由时自愈） |
-| 2.2.1 | 0.1.7+ | 自动设置页 + `.volatile()` 引用单元 |
+| 2.2.1 | 0.1.7+ | 依赖 `autoGenerate` 自动页 + `.volatile()` 引用单元；宿主客户端不渲染 schema 自动页，故设置入口实际不可见 |
 | 2.1.0 | 0.1.2 – 0.1.5 | 直连传输 + 工具 schema 补齐；宿主 0.1.5 移除 `settings.installSection` 后宿主半边静默失效 |
 | 0.1.0 | 0.1.1 | 初版 |
 
