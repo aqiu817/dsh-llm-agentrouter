@@ -5,6 +5,16 @@
 
 把 AgentRouter 中转站接入 DeepSeek Harness 的 profile bundle：一条 provider 路由、四个模型及其推理档位，一个在「设置 → 插件」里切换国内 / 国际端点的开关，以及一层让出站请求符合该中转站要求的兼容处理。
 
+## 相关插件
+
+同一作者维护的其他 DSH 插件：
+
+| 插件 | 做什么 |
+| --- | --- |
+| [dsh-plugin-continue-on-limit](https://github.com/aqiu817/dsh-plugin-continue-on-limit) | 一轮因输出 token 用尽而结束时，自动替你发下一轮的「继续」；带每会话突发上限、最小间隔和关闭开关 |
+| [dsh-plugin-auto-retry](https://github.com/aqiu817/dsh-plugin-auto-retry) | 接手内置重试器放弃的模型请求失败，沿它的退避曲线继续重试，并显示会话记录里被丢弃的完整错误 |
+| [dsh-llm-kilo-gateway](https://github.com/aqiu817/dsh-llm-kilo-gateway) | 把 Kilo Gateway 的免费模型接入为 DSH 的模型提供商：自动发现免费目录，暴露工具 / 推理 / 图像能力，并附 API Key、变更日志与用量统计的设置页 |
+
 ## 它做了什么
 
 | 组成 | 位置 | 职责 |
@@ -261,16 +271,6 @@ npm run publish:npm     # 真正发布
 ```
 
 必须走这个脚本，不要直接 `npm publish`：本机 `~/.npmrc` 的全局 `registry` 指向 `registry.npmmirror.com`（只读镜像），直接发布会打到镜像上并失败；脚本显式指定 `--registry=https://registry.npmjs.org/` 覆盖它。npmjs 的 token 在同一个文件里（`//registry.npmjs.org/:_authToken`），脚本在发布前对它做一次只读校验，被拒时给出替换 token 的指令然后**继续**——`/-/whoami` 需要能读取账号的 token，而只授权发布的细粒度 token 在那里同样会被拒（401）却发布得动，所以这里不做拦截，交给 npm 判定。
-
-## 相关插件
-
-同一作者维护的其他 DSH 插件：
-
-| 插件 | 做什么 |
-| --- | --- |
-| [dsh-plugin-continue-on-limit](https://github.com/aqiu817/dsh-plugin-continue-on-limit) | 一轮因输出 token 用尽而结束时，自动替你发下一轮的「继续」；带每会话突发上限、最小间隔和关闭开关 |
-| [dsh-plugin-auto-retry](https://github.com/aqiu817/dsh-plugin-auto-retry) | 接手内置重试器放弃的模型请求失败，沿它的退避曲线继续重试，并显示会话记录里被丢弃的完整错误 |
-| [dsh-llm-kilo-gateway](https://github.com/aqiu817/dsh-llm-kilo-gateway) | 把 Kilo Gateway 的免费模型接入为 DSH 的模型提供商：自动发现免费目录，暴露工具 / 推理 / 图像能力，并附 API Key、变更日志与用量统计的设置页 |
 
 ## 致谢
 
