@@ -30,11 +30,12 @@
 # both endpoints because it is one relay account.
 #
 # MODEL CATALOG
-# pi-ai's installed catalog describes all three models, but under their vendor
-# providers (`anthropic`, `openai`) and other protocols — Opus via
-# anthropic-messages, gpt-5.6-sol via openai-responses. A hand-declared route
+# pi-ai's installed catalog describes most of these models, but under their
+# vendor providers (`anthropic`, `openai`) and other protocols — Opus via
+# anthropic-messages, the GPT models via openai-responses — and it can lag a
+# relay release behind (it has no `gpt-6.1-sol` yet). A hand-declared route
 # inherits nothing, so capacities, reasoning levels, and compat switches are
-# restated here from that catalog, adjusted for Chat Completions.
+# restated here, adjusted for Chat Completions.
 #
 # `reasoningEfforts` keys are the levels the picker offers; each value is the
 # wire spelling sent as `reasoning_effort`. All three models were probed against
@@ -72,24 +73,30 @@
           supportsStrictMode: true
           supportsUsageInStreaming: true
         models:
-          - id: claude-opus-5
-            name: Claude Opus 5
+          # The relay renamed this model: /v1/models now lists `claude-opus-5-5`
+          # where it used to list `claude-opus-5`, and no longer lists
+          # `claude-opus-4-8` at all. Capacities are unchanged, and the vendor's
+          # own catalog — which carries this exact id — gives the same figures.
+          - id: claude-opus-5-5
+            name: Claude Opus 5.5
             contextWindow: 1000000
             maxTokens: 128000
-            reasoningEfforts: &opus-efforts
+            reasoningEfforts:
               off:
               low: low
               medium: medium
               high: high
               xhigh: xhigh
               max: max
-          - id: claude-opus-4-8
-            name: Claude Opus 4.8
-            contextWindow: 1000000
-            maxTokens: 128000
-            reasoningEfforts: *opus-efforts
-          - id: gpt-5.6-sol
-            name: GPT 5.6 Sol
+          # Renamed from `gpt-5.6-sol` in the same change. The vendor catalog
+          # stops one release short of this id (`gpt-6-sol`), so the capacities
+          # and levels below are carried over from the model this one replaces.
+          # Re-probing against the relay confirmed only the lower half: `medium`
+          # and above answered 402 «Quota service is temporarily unavailable»,
+          # which is a relay fault rather than a rejection and so says nothing
+          # about the levels. Revisit when the quota service is healthy.
+          - id: gpt-6.1-sol
+            name: GPT 6.1 Sol
             contextWindow: 272000
             maxTokens: 128000
             reasoningEfforts:
@@ -100,11 +107,9 @@
               high: high
               xhigh: xhigh
               max: max
-          # Provisionally declared as a copy of gpt-5.6-sol: the model appeared
-          # in /v1/models while the Claude / GPT budget pool was exhausted (402
-          # «Budget pool quota has been exhausted»), so its own levels and its
-          # context ceiling could not be probed. Revisit both when the pool
-          # refreshes.
+          # Levels re-probed against the relay: every one answered 200, so the
+          # set is measured rather than inherited. The 272,000 ceiling stays the
+          # carried-over figure, which the vendor catalog gives for this id too.
           - id: gpt-6-astra
             name: GPT 6 Astra
             contextWindow: 272000

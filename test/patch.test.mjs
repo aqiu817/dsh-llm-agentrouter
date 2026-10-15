@@ -42,7 +42,7 @@ test('the plugin row is inserted so the fence and the switch actually load', () 
 
 test('every model declares the levels the relay was probed with', () => {
   const ids = route.models.map((model) => model.id)
-  assert.deepEqual(ids, ['claude-opus-5', 'claude-opus-4-8', 'gpt-5.6-sol', 'gpt-6-astra', 'deepseek-v4-flash'])
+  assert.deepEqual(ids, ['claude-opus-5-5', 'gpt-6.1-sol', 'gpt-6-astra', 'deepseek-v4-flash'])
 
   const wire = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
   for (const model of route.models) {

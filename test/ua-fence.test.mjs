@@ -50,6 +50,16 @@ before(async () => {
         res.end('{"error":{"message":"some other failure","code":"bad_response_status_code"}}')
         return
       }
+      // The relay's quota *service* being down, which is not the budget pool
+      // being spent. It carries the word "Quota", so a test looking for that
+      // word alone would annotate it — the regression this pins.
+      if (req.url === '/v1/quota-outage') {
+        res.writeHead(402, { 'content-type': 'application/json' })
+        res.end(
+          '{"error":{"message":"Quota service is temporarily unavailable. Please try again later.","type":"invalid_request_error","param":"","code":null}}',
+        )
+        return
+      }
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end('{"ok":true}')
     })
@@ -109,7 +119,7 @@ test('rewrites the sentinel host to the selected endpoint and sends the relay Us
     const res = await fetch(`http://${SENTINEL}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'user-agent': HARNESS_UA, authorization: 'Bearer test-key', 'content-type': 'application/json' },
-      body: '{"model":"claude-opus-5"}',
+      body: '{"model":"claude-opus-5-5"}',
     })
     assert.equal(res.status, 200)
     await res.json()
@@ -121,7 +131,7 @@ test('rewrites the sentinel host to the selected endpoint and sends the relay Us
   assert.equal(last.host, host, 'the request must reach the selected endpoint')
   assert.equal(last.path, '/v1/chat/completions', 'the path survives re-addressing')
   assert.equal(last.auth, 'Bearer test-key', 'every other header survives untouched')
-  assert.equal(last.body, '{"model":"claude-opus-5"}', 'the body is never rebuilt')
+  assert.equal(last.body, '{"model":"claude-opus-5-5"}', 'the body is never rebuilt')
 })
 
 test('an endpoint switch is observed without reinstalling the fence', async () => {
@@ -224,7 +234,7 @@ test('a relay 402 quota error keeps its message and gains the configured hint', 
     const res = await fetch(`http://${SENTINEL}/v1/quota`, {
       method: 'POST',
       headers: { 'user-agent': HARNESS_UA, authorization: 'Bearer test-key', 'content-type': 'application/json' },
-      body: '{"model":"claude-opus-5"}',
+      body: '{"model":"claude-opus-5-5"}',
     })
     assert.equal(res.status, 402, 'the relay status must survive')
     assert.match(res.headers.get('content-type') ?? '', /application\/json/, 'the mislabelled stream becomes a JSON error')
@@ -249,13 +259,40 @@ test('a relay 402 that is not a quota error passes through unannotated', async (
     const res = await fetch(`http://${SENTINEL}/v1/not-quota`, {
       method: 'POST',
       headers: { 'user-agent': HARNESS_UA, authorization: 'Bearer test-key', 'content-type': 'application/json' },
-      body: '{"model":"claude-opus-5"}',
+      body: '{"model":"claude-opus-5-5"}',
     })
     assert.equal(res.status, 402)
     // The fence rebuilt the body (same bytes) but appended nothing.
     const parsed = await res.json()
     assert.equal(parsed.error.message, 'some other failure')
     assert.ok(!parsed.error.message.includes('本批额度'), 'no hint for a non-quota 402')
+  } finally {
+    fence.dispose()
+  }
+})
+
+test('a 402 from the quota service being down is not labelled as a spent budget', async () => {
+  // The relay answers two different 402s: the budget pool being empty, and the
+  // quota service itself being unavailable. Both contain "quota", so only the
+  // former may get the exhaustion hint — telling a user to wait for the next
+  // pool when the fault is transient sends them away for no reason.
+  const fence = await activate({
+    endpoint: 'cn',
+    endpoints: { cn: host, intl: 'unreachable.invalid' },
+    sentinel: SENTINEL,
+    quotaHint: 'Claude / GPT 本批额度已用完，请等待下一批投放。',
+    announce: false,
+  })
+  try {
+    const res = await fetch(`http://${SENTINEL}/v1/quota-outage`, {
+      method: 'POST',
+      headers: { 'user-agent': HARNESS_UA, authorization: 'Bearer test-key', 'content-type': 'application/json' },
+      body: '{"model":"claude-opus-5-5"}',
+    })
+    assert.equal(res.status, 402, 'the relay status must survive')
+    const parsed = await res.json()
+    assert.match(parsed.error.message, /Quota service is temporarily unavailable/, 'the original message is kept')
+    assert.ok(!parsed.error.message.includes('本批额度'), 'an outage must not be annotated as exhaustion')
   } finally {
     fence.dispose()
   }
@@ -273,7 +310,7 @@ test('a blank quotaHint disables the 402 annotation entirely', async () => {
     const res = await fetch(`http://${SENTINEL}/v1/quota`, {
       method: 'POST',
       headers: { 'user-agent': HARNESS_UA, authorization: 'Bearer test-key', 'content-type': 'application/json' },
-      body: '{"model":"claude-opus-5"}',
+      body: '{"model":"claude-opus-5-5"}',
     })
     // The response passes through exactly as the relay sent it.
     assert.equal(res.status, 402)

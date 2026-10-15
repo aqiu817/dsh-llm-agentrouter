@@ -157,8 +157,8 @@ test('the declared route streams a turn from the relay', { skip }, async () => {
       api: openAICompletionsApi(),
       models: [
         {
-          id: 'claude-opus-5',
-          name: 'Claude Opus 5',
+          id: 'claude-opus-5-5',
+          name: 'Claude Opus 5.5',
           api: 'openai-completions',
           provider: 'agentrouter',
           baseUrl: RELAY_BASE_URL,
@@ -186,7 +186,7 @@ test('the declared route streams a turn from the relay', { skip }, async () => {
 
     const models = createModels()
     models.setProvider(provider)
-    const model = models.getModel('agentrouter', 'claude-opus-5')
+    const model = models.getModel('agentrouter', 'claude-opus-5-5')
 
     // The harness sends its attribution User-Agent on every request; the fence
     // is what turns it into the one the relay accepts.
@@ -234,7 +234,7 @@ test('without the fence the relay rejects the harness User-Agent', { skip: key =
       'content-type': 'application/json',
       'user-agent': HARNESS_UA,
     },
-    body: JSON.stringify({ model: 'claude-opus-5', max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }),
+    body: JSON.stringify({ model: 'claude-opus-5-5', max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }),
     signal: AbortSignal.timeout(30000),
   })
   assert.equal(res.status, 401, 'the relay is expected to reject an unfenced client')

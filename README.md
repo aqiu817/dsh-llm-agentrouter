@@ -6,7 +6,7 @@
 ![?](https://img.cdn1.vip/i/6aae264923a5d_1789797961.png)
 本模组曾因中转站渠道进入 probation、上游校验不一致而暂停更新。**2.1.0 起恢复维护**：出站请求已能同时满足当前全部上游池（围栏新增直连传输绕过 WAF 质询、工具 schema 补齐 `required`、声明 DeepSeek 思考协议，见下文与致谢）。
 
-把 AgentRouter 中转站接入 DeepSeek Harness 的 profile bundle：一条 provider 路由、五个模型及其推理档位，一个在「设置 → 插件」里切换国内 / 国际端点的开关，以及一层让出站请求符合该中转站要求的兼容处理。
+把 AgentRouter 中转站接入 DeepSeek Harness 的 profile bundle：一条 provider 路由、四个模型及其推理档位，一个在「设置 → 插件」里切换国内 / 国际端点的开关，以及一层让出站请求符合该中转站要求的兼容处理。
 
 ## 它做了什么
 
@@ -16,7 +16,7 @@
 | 端点 + 请求兼容 | `lib/index.js` | 注册 `llm-agentrouter` 设置分节；把哨兵主机改写为所选端点，把 `user-agent` 换成该中转站要求的取值，按端点绕过进程代理直连，并给缺失 `required` 数组的工具 schema 补上空数组（部分上游池按 null 校验并拒绝） |
 | 路由自愈 | `lib/route.js` | 路由的运行时副本。profile 自己的补丁层会整体覆盖 `llm-pi-ai.providers`（见「桌面端支持」），围栏据此把这条路由重新声明回去 |
 | 端点开关 + 重试开关 | `lib/client.js` | 注册「插件」页里的 AgentRouter 卡片：端点分段控件、静默重试开关、最大尝试次数。设置数据由宿主 `settings.describe` 提供，写入走 `configForms` 的 `mutate` |
-| 行为测试 | `test/` | 65 项：浏览器 bundle 5 项、bundle patch 8 项、改写语义 9 项（含 3 项 402 注释）、直连传输 10 项、工具 schema 补齐 3 项、静默重试 7 项、路由自愈 17 项、运行时路由与补丁一致 4 项、活体流式 2 项（无 key 时跳过） |
+| 行为测试 | `test/` | 66 项：浏览器 bundle 5 项、bundle patch 8 项、改写语义 10 项（含 4 项 402 注释）、直连传输 10 项、工具 schema 补齐 3 项、静默重试 7 项、路由自愈 17 项、运行时路由与补丁一致 4 项、活体流式 2 项（无 key 时跳过） |
 
 ## 为什么是一条路由，而不是两条
 
@@ -30,11 +30,12 @@
 
 | 模型 ID | 名称 | 上下文窗口 | 最大输出 | 推理强度（档位） | 备注 |
 | --- | --- | --- | --- | --- | --- |
-| `claude-opus-5` | Claude Opus 5 | 1,000,000 | 128,000 | off / low / medium / high / xhigh / max |  |
-| `claude-opus-4-8` | Claude Opus 4.8 | 1,000,000 | 128,000 | off / low / medium / high / xhigh / max |  |
-| `gpt-5.6-sol` | GPT 5.6 Sol | 272,000 | 128,000 | off / minimal / low / medium / high / xhigh / max |  |
-| `gpt-6-astra` | GPT 6 Astra | 272,000 | 128,000 | off / minimal / low / medium / high / xhigh / max | 暂同 GPT 5.6 Sol——该模型上线时 Claude / GPT 预算池恰已耗尽（402），档位与上限未能活体验证，额度刷新后校订 |
+| `claude-opus-5-5` | Claude Opus 5.5 | 1,000,000 | 128,000 | off / low / medium / high / xhigh / max | 由 `claude-opus-5` 更名而来；容量与厂商目录同名条目一致 |
+| `gpt-6.1-sol` | GPT 6.1 Sol | 272,000 | 128,000 | off / minimal / low / medium / high / xhigh / max | 由 `gpt-5.6-sol` 更名而来；`medium` 以上因中转站配额服务故障（402）未能复测，故障排除后校订 |
+| `gpt-6-astra` | GPT 6 Astra | 272,000 | 128,000 | off / minimal / low / medium / high / xhigh / max | 档位已逐级复测通过；上限沿用 272,000 |
 | `deepseek-v4-flash` | DeepSeek V4 Flash | 1,000,000 | 256,000 | off / low / high / max | 档位对齐第一方目录；`off` 送出 `none` 而非留空 |
+
+> `claude-opus-4-8` 已从中转站的 `/v1/models` 移除，本版本不再声明。
 
 > 所有模型均走 `/v1/chat/completions`。两个端点的 `/v1/models` 返回同一组 ID。`maxTokens` 上限来自中转站返回值约束，上下文窗口以「大海捞针」实测为准。
 
@@ -215,6 +216,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 | 插件版本 | 适配的 dsh | 说明 |
 | --- | --- | --- |
+| 2.5.0 | 0.2.x | 模型目录跟随中转站更新：`claude-opus-5` → `claude-opus-5-5`、`gpt-5.6-sol` → `gpt-6.1-sol`，`claude-opus-4-8` 下架；402 只在预算池真的耗尽时追加提示 |
 | 2.4.0 | 0.2.x | 设置页显式注册到全部三个插槽（`plugins.bundle.config` / `plugins.row.config` / `plugins.item`）；端点 + 静默重试 + 尝试次数 |
 | 2.3.0 | 0.1.7+ / 0.2.x | 静默重试开关 + 桌面端支持（profile 覆盖路由时自愈） |
 | 2.2.1 | 0.1.7+ | 依赖 `autoGenerate` 自动页 + `.volatile()` 引用单元；宿主客户端不渲染 schema 自动页，故设置入口实际不可见 |
@@ -225,7 +227,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 ```bash
 npm ci        # 仅测试所需的 devDependencies
-npm test      # 65 项
+npm test      # 66 项
 ```
 
 `lib/route.js` 由 `cordis.patch.yml` 生成，不要手改：
@@ -236,7 +238,13 @@ npm run gen-route     # 等价于 node scripts/gen-route.mjs
 
 `test/route-parity.test.mjs` 会比对两者，改了一处而忘了重跑生成器会被测试拦下。
 
-克隆后即可跑：65 项中 63 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
+克隆后即可跑：66 项中 64 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
+
+**这两项活体测试会真的向中转站发请求，每次都在消耗额度。** 它们的 key 解析顺序是 `AGENTROUTER_API_KEY` 环境变量、然后 `$DSH_HOME/.credentials.yaml`，所以只要凭据文件里存了 key 就会跑——把 `DSH_HOME` 指到一个空目录即可让它们重新跳过：
+
+```bash
+DSH_HOME=/tmp/dsh-offline npm test     # 64 通过、2 跳过，零请求
+```
 
 
 活体测试需要一个可解析的 key，否则自动跳过——因此离线也能跑完整套。key 的来源，按优先级：

@@ -134,7 +134,7 @@ test('tool schemas reach the wire with an explicit required array', async () => 
 
 test('bodies that need no fill are not rebuilt', async () => {
   const dispose = await activate()
-  const withoutTools = '{"model":"claude-opus-5","messages":[]}'
+  const withoutTools = '{"model":"claude-opus-5-5","messages":[]}'
   const withCompleteSchema =
     '{"model":"deepseek-v4-flash","tools":[{"type":"function","function":{"name":"edit","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}}]}'
   try {
