@@ -3,9 +3,6 @@
 [![test](https://github.com/aqiu817/dsh-llm-agentrouter/actions/workflows/test.yml/badge.svg)](https://github.com/aqiu817/dsh-llm-agentrouter/actions/workflows/test.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-![?](https://img.cdn1.vip/i/6aae264923a5d_1789797961.png)
-本模组曾因中转站渠道进入 probation、上游校验不一致而暂停更新。**2.1.0 起恢复维护**：出站请求已能同时满足当前全部上游池（围栏新增直连传输绕过 WAF 质询、工具 schema 补齐 `required`、声明 DeepSeek 思考协议，见下文与致谢）。
-
 把 AgentRouter 中转站接入 DeepSeek Harness 的 profile bundle：一条 provider 路由、四个模型及其推理档位，一个在「设置 → 插件」里切换国内 / 国际端点的开关，以及一层让出站请求符合该中转站要求的兼容处理。
 
 ## 它做了什么
@@ -264,6 +261,16 @@ npm run publish:npm     # 真正发布
 ```
 
 必须走这个脚本，不要直接 `npm publish`：本机 `~/.npmrc` 的全局 `registry` 指向 `registry.npmmirror.com`（只读镜像），直接发布会打到镜像上并失败；脚本显式指定 `--registry=https://registry.npmjs.org/` 覆盖它。npmjs 的 token 在同一个文件里（`//registry.npmjs.org/:_authToken`），脚本在发布前先校验它，401 时给出替换 token 的指令——npm 自己在这种情况下打印的报错不会说明是这两项设置中的哪一项有问题。
+
+## 相关插件
+
+同一作者维护的其他 DSH 插件：
+
+| 插件 | 做什么 |
+| --- | --- |
+| [dsh-plugin-continue-on-limit](https://github.com/aqiu817/dsh-plugin-continue-on-limit) | 一轮因输出 token 用尽而结束时，自动替你发下一轮的「继续」；带每会话突发上限、最小间隔和关闭开关 |
+| [dsh-plugin-auto-retry](https://github.com/aqiu817/dsh-plugin-auto-retry) | 接手内置重试器放弃的模型请求失败，沿它的退避曲线继续重试，并显示会话记录里被丢弃的完整错误 |
+| [dsh-llm-kilo-gateway](https://github.com/aqiu817/dsh-llm-kilo-gateway) | 把 Kilo Gateway 的免费模型接入为 DSH 的模型提供商：自动发现免费目录，暴露工具 / 推理 / 图像能力，并附 API Key、变更日志与用量统计的设置页 |
 
 ## 致谢
 
