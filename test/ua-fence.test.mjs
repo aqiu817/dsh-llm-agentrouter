@@ -11,7 +11,7 @@ import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 
-const FENCE_UA = 'claude-cli/2.1.161 (external, cli)'
+const FENCE_UA = 'claude-cli/2.1.300 (external, cli)'
 const HARNESS_UA = 'deepseek-harness/0.1.1 (+https://github.com/deepseek-ai/deepseek-harness)'
 const SENTINEL = 'relay.agentrouter.internal'
 

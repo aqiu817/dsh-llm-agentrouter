@@ -89,19 +89,15 @@
               xhigh: xhigh
               max: max
           # Renamed from `gpt-5.6-sol` in the same change. The vendor catalog
-          # stops one release short of this id (`gpt-6-sol`), so the capacities
-          # and levels below are carried over from the model this one replaces.
-          # Re-probing against the relay confirmed only the lower half: `medium`
-          # and above answered 402 «Quota service is temporarily unavailable»,
-          # which is a relay fault rather than a rejection and so says nothing
-          # about the levels. Revisit when the quota service is healthy.
+          # stops one release short of this id, so the levels below mirror the
+          # `gpt-6-sol` entry there — `off` carries `none` and `minimal` is not
+          # offered — and the capacities are the carried-over 272K / 128K.
           - id: gpt-6.1-sol
             name: GPT 6.1 Sol
             contextWindow: 272000
             maxTokens: 128000
             reasoningEfforts:
-              off:
-              minimal: minimal
+              off: none
               low: low
               medium: medium
               high: high

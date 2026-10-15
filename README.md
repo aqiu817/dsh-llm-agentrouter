@@ -31,7 +31,7 @@
 | 模型 ID | 名称 | 上下文窗口 | 最大输出 | 推理强度（档位） | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | `claude-opus-5-5` | Claude Opus 5.5 | 1,000,000 | 128,000 | off / low / medium / high / xhigh / max | 由 `claude-opus-5` 更名而来；容量与厂商目录同名条目一致 |
-| `gpt-6.1-sol` | GPT 6.1 Sol | 272,000 | 128,000 | off / minimal / low / medium / high / xhigh / max | 由 `gpt-5.6-sol` 更名而来；`medium` 以上因中转站配额服务故障（402）未能复测，故障排除后校订 |
+| `gpt-6.1-sol` | GPT 6.1 Sol | 272,000 | 128,000 | off / low / medium / high / xhigh / max | 由 `gpt-5.6-sol` 更名而来；档位对齐厂商目录的 `gpt-6-sol`（`off` 送出 `none`，不提供 `minimal`） |
 | `gpt-6-astra` | GPT 6 Astra | 272,000 | 128,000 | off / minimal / low / medium / high / xhigh / max | 档位已逐级复测通过；上限沿用 272,000 |
 | `deepseek-v4-flash` | DeepSeek V4 Flash | 1,000,000 | 256,000 | off / low / high / max | 档位对齐第一方目录；`off` 送出 `none` 而非留空 |
 
