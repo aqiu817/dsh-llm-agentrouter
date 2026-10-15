@@ -260,7 +260,7 @@ npm run publish:dry     # 校验 token + 打包预检，不发出去
 npm run publish:npm     # 真正发布
 ```
 
-必须走这个脚本，不要直接 `npm publish`：本机 `~/.npmrc` 的全局 `registry` 指向 `registry.npmmirror.com`（只读镜像），直接发布会打到镜像上并失败；脚本显式指定 `--registry=https://registry.npmjs.org/` 覆盖它。npmjs 的 token 在同一个文件里（`//registry.npmjs.org/:_authToken`），脚本在发布前先校验它，401 时给出替换 token 的指令——npm 自己在这种情况下打印的报错不会说明是这两项设置中的哪一项有问题。
+必须走这个脚本，不要直接 `npm publish`：本机 `~/.npmrc` 的全局 `registry` 指向 `registry.npmmirror.com`（只读镜像），直接发布会打到镜像上并失败；脚本显式指定 `--registry=https://registry.npmjs.org/` 覆盖它。npmjs 的 token 在同一个文件里（`//registry.npmjs.org/:_authToken`），脚本在发布前对它做一次只读校验，被拒时给出替换 token 的指令然后**继续**——`/-/whoami` 需要能读取账号的 token，而只授权发布的细粒度 token 在那里同样会被拒（401）却发布得动，所以这里不做拦截，交给 npm 判定。
 
 ## 相关插件
 
