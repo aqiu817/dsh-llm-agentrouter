@@ -3,7 +3,7 @@
 [![test](https://github.com/aqiu817/dsh-llm-agentrouter/actions/workflows/test.yml/badge.svg)](https://github.com/aqiu817/dsh-llm-agentrouter/actions/workflows/test.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-把 AgentRouter 中转站接入 DeepSeek Harness 的 profile bundle：一条 provider 路由、四个模型及其推理档位，一个在「设置 → 插件」里切换国内 / 国际端点的开关，以及一层让出站请求符合该中转站要求的兼容处理。
+把 AgentRouter 中转站接入 DeepSeek Harness 的 profile bundle：一条 provider 路由、三个模型及其推理档位，一个在「设置 → 插件」里切换国内 / 国际端点的开关，以及一层让出站请求符合该中转站要求的兼容处理。
 
 ## 相关插件
 
@@ -35,16 +35,17 @@
 
 ## 当前版本所支持的模型与参数
 
-| 模型 ID | 名称 | 上下文窗口 | 最大输出 | 推理强度（档位） | 备注 |
-| --- | --- | --- | --- | --- | --- |
-| `claude-opus-5-5` | Claude Opus 5.5 | 1,000,000 | 128,000 | off / low / medium / high / xhigh / max | 由 `claude-opus-5` 更名而来；容量与厂商目录同名条目一致 |
-| `gpt-6.1-sol` | GPT 6.1 Sol | 272,000 | 128,000 | off / low / medium / high / xhigh / max | 由 `gpt-5.6-sol` 更名而来；档位对齐厂商目录的 `gpt-6-sol`（`off` 送出 `none`，不提供 `minimal`） |
-| `gpt-6-astra` | GPT 6 Astra | 272,000 | 128,000 | off / minimal / low / medium / high / xhigh / max | 档位已逐级复测通过；上限沿用 272,000 |
-| `deepseek-v4-flash` | DeepSeek V4 Flash | 1,000,000 | 256,000 | off / low / high / max | 档位对齐第一方目录；`off` 送出 `none` 而非留空 |
+| 模型 ID | 名称 | 上下文窗口 | 最大输出 | 输入模态 | 推理强度（档位） | 备注 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `gpt-5.6-sol` | GPT 5.6 Sol | 1,050,000 | 128,000 | text / image | off / minimal / low / medium / high / xhigh / max |  |
+| `gpt-6-astra` | GPT 6 Astra | 1,050,000 | 128,000 | text / image | off / minimal / low / medium / high / xhigh / max |  |
+| `gpt-6.1-sol` | GPT 6.1 Sol | 1,050,000 | 128,000 | text / image | off / low / medium / high / xhigh / max | 档位对齐厂商目录的 `gpt-6-sol`（`off` 送出 `none`，不提供 `minimal`） |
 
-> `claude-opus-4-8` 已从中转站的 `/v1/models` 移除，本版本不再声明。
+> 容量与模态来自 [models.dev](https://models.dev) 的 `agentrouter` 条目；它对三个模型一致给出 1,050,000 / 128,000 与 text / image / PDF 输入，而 harness 只认 `text` 与 `image`，所以 `defaultInput` 声明这两种。
 
-> 所有模型均走 `/v1/chat/completions`。两个端点的 `/v1/models` 返回同一组 ID。`maxTokens` 上限来自中转站返回值约束，上下文窗口以「大海捞针」实测为准。
+> `claude-opus-5-5` 与 `deepseek-v4-flash` 已不在中转站的 `/v1/models` 中，实测调用返回 **503「当前分组 probation 下对于模型 … 无可用渠道」**，因此本版本不再声明——宁可让选择器里没有，也不放一个必然失败的条目。渠道恢复后把它们加回 `cordis.patch.yml` 即可；`deepseek-v4-flash` 需要的 DeepSeek 思考协议声明在该文件的 git 历史里。
+
+> 所有模型均走 `/v1/chat/completions`。`maxTokens` 上限来自中转站返回值约束，上下文窗口以「大海捞针」实测为准。
 
 ## 安装
 
@@ -223,6 +224,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 | 插件版本 | 适配的 dsh | 说明 |
 | --- | --- | --- |
+| 2.6.0 | 0.2.x | 模型目录再次跟随中转站：`gpt-5.6-sol` 回归，`claude-opus-5-5` 与 `deepseek-v4-flash` 因无可用渠道下架；容量与输入模态改由 models.dev 提供（1,050,000 / 128,000，text + image） |
 | 2.5.0 | 0.2.x | 模型目录跟随中转站更新：`claude-opus-5` → `claude-opus-5-5`、`gpt-5.6-sol` → `gpt-6.1-sol`，`claude-opus-4-8` 下架；402 只在预算池真的耗尽时追加提示 |
 | 2.4.0 | 0.2.x | 设置页显式注册到全部三个插槽（`plugins.bundle.config` / `plugins.row.config` / `plugins.item`）；端点 + 静默重试 + 尝试次数 |
 | 2.3.0 | 0.1.7+ / 0.2.x | 静默重试开关 + 桌面端支持（profile 覆盖路由时自愈） |
@@ -245,12 +247,12 @@ npm run gen-route     # 等价于 node scripts/gen-route.mjs
 
 `test/route-parity.test.mjs` 会比对两者，改了一处而忘了重跑生成器会被测试拦下。
 
-克隆后即可跑：66 项中 64 项完全离线，2 项活体测试在无 key 时自动跳过（空字符串等同于无 key——未配置的 GitHub Actions secret 正是以空串到达）。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那两项也会真跑。
+克隆后即可跑：66 项中 62 项通过，4 项跳过——2 项活体测试在无 key 时跳过（空字符串等同于无 key，未配置的 GitHub Actions secret 正是以空串到达），另 2 项只在 `deepseek-v4-flash` 位于中转站目录中时才执行。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那 2 项活体测试也会真跑。
 
 **这两项活体测试会真的向中转站发请求，每次都在消耗额度。** 它们的 key 解析顺序是 `AGENTROUTER_API_KEY` 环境变量、然后 `$DSH_HOME/.credentials.yaml`，所以只要凭据文件里存了 key 就会跑——把 `DSH_HOME` 指到一个空目录即可让它们重新跳过：
 
 ```bash
-DSH_HOME=/tmp/dsh-offline npm test     # 64 通过、2 跳过，零请求
+DSH_HOME=/tmp/dsh-offline npm test     # 62 通过、4 跳过，零请求
 ```
 
 

@@ -60,6 +60,7 @@
         baseURL: https://relay.agentrouter.internal/v1
         defaultInput:
           - text
+          - image
         # The relay is not an endpoint pi-ai can recognize, so its detection
         # would address it as OpenAI itself: `developer` system role and
         # `max_completion_tokens`. Probes show it accepts plain `system`,
@@ -73,42 +74,20 @@
           supportsStrictMode: true
           supportsUsageInStreaming: true
         models:
-          # The relay renamed this model: /v1/models now lists `claude-opus-5-5`
-          # where it used to list `claude-opus-5`, and no longer lists
-          # `claude-opus-4-8` at all. Capacities are unchanged, and the vendor's
-          # own catalog — which carries this exact id — gives the same figures.
-          - id: claude-opus-5-5
-            name: Claude Opus 5.5
-            contextWindow: 1000000
-            maxTokens: 128000
-            reasoningEfforts:
-              off:
-              low: low
-              medium: medium
-              high: high
-              xhigh: xhigh
-              max: max
-          # Renamed from `gpt-5.6-sol` in the same change. The vendor catalog
-          # stops one release short of this id, so the levels below mirror the
-          # `gpt-6-sol` entry there — `off` carries `none` and `minimal` is not
-          # offered — and the capacities are the carried-over 272K / 128K.
-          - id: gpt-6.1-sol
-            name: GPT 6.1 Sol
-            contextWindow: 272000
-            maxTokens: 128000
-            reasoningEfforts:
-              off: none
-              low: low
-              medium: medium
-              high: high
-              xhigh: xhigh
-              max: max
-          # Levels re-probed against the relay: every one answered 200, so the
-          # set is measured rather than inherited. The 272,000 ceiling stays the
-          # carried-over figure, which the vendor catalog gives for this id too.
-          - id: gpt-6-astra
-            name: GPT 6 Astra
-            contextWindow: 272000
+          # The relay's catalog rotates with channel availability. At this
+          # writing /v1/models lists these three; `claude-opus-5-5` and
+          # `deepseek-v4-flash` answer 503 «no available channel for model …
+          # under group probation», so they are omitted rather than offered and
+          # broken. Restore them here when their channels return — the DeepSeek
+          # protocol block `deepseek-v4-flash` needs is in this file's history.
+          #
+          # Capacities and modalities come from models.dev, which lists all
+          # three at a 1,050,000 context window, 128,000 output, and text /
+          # image / PDF input. The harness offers only `text` and `image`, so
+          # that is what `defaultInput` above declares.
+          - id: gpt-5.6-sol
+            name: GPT 5.6 Sol
+            contextWindow: 1050000
             maxTokens: 128000
             reasoningEfforts:
               off:
@@ -118,40 +97,31 @@
               high: high
               xhigh: xhigh
               max: max
-          # Tiers mirror what the first-party `deepseek-official` route offers for
-          # DeepSeek-V4-Flash — off / low / high / max — rather than the relay's
-          # full enum. The relay does accept `minimal`, `medium`, and `xhigh` for
-          # this model, but the levels a model is *offered* under should match the
-          # vendor's own selection; add them here if that ever changes.
-          #
-          # `off` carries the wire value `none` instead of being left empty, and
-          # that is not cosmetic: omitting `reasoning_effort` entirely still
-          # returns `reasoning_content` with a nonzero `reasoning_tokens`, so an
-          # empty `off:` would offer a switch that does nothing. `none` is the
-          # only spelling that actually stops the thinking, and it is the relay's
-          # own word — `off` is rejected with a 400 naming the accepted enum.
-          - id: deepseek-v4-flash
-            name: DeepSeek V4 Flash
-            contextWindow: 1000000
-            maxTokens: 256000
-            # The relay routes this model to a DeepSeek-compatible thinking API,
-            # but under its own hostname, so pi-ai cannot infer DeepSeek
-            # compatibility from the URL the way it does for api.deepseek.com —
-            # the protocol has to be declared here. `deepseek` thinkingFormat
-            # sends `thinking` / `reasoning_effort` in DeepSeek's spelling, and
-            # the replay flag carries `reasoning_content` back on assistant
-            # tool-call history, which that upstream requires on every request
-            # whose history contains tool calls: omit it and the upstream
-            # rejects the whole request once a tool call has happened.
-            compat:
-              thinkingFormat: deepseek
-              requiresReasoningContentOnAssistantMessages: true
-              supportsDeveloperRole: false
-              supportsStore: false
+          - id: gpt-6-astra
+            name: GPT 6 Astra
+            contextWindow: 1050000
+            maxTokens: 128000
+            reasoningEfforts:
+              off:
+              minimal: minimal
+              low: low
+              medium: medium
+              high: high
+              xhigh: xhigh
+              max: max
+          # Its levels mirror the vendor catalog's `gpt-6-sol` entry, which is
+          # one release behind this id: `off` carries `none`, `minimal` is not
+          # offered.
+          - id: gpt-6.1-sol
+            name: GPT 6.1 Sol
+            contextWindow: 1050000
+            maxTokens: 128000
             reasoningEfforts:
               off: none
               low: low
+              medium: medium
               high: high
+              xhigh: xhigh
               max: max
 
 # The endpoint switch and the User-Agent fence. Both are one plugin because both

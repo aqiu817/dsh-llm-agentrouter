@@ -16,6 +16,16 @@ const patch = load(readFileSync(new URL('../cordis.patch.yml', import.meta.url),
 const providers = patch.find((row) => row.id === 'llm-pi-ai').config.providers
 const route = providers.agentrouter
 
+/**
+ * `deepseek-v4-flash` leaves the catalog whenever the relay has no channel for
+ * it, so the two tests below describe a model that is not always declared. They
+ * skip while it is absent and start guarding again the moment it returns —
+ * deleting them would lose the protocol requirements they record.
+ */
+const deepseek = route.models.find((model) => model.id === 'deepseek-v4-flash')
+const deepseekSkip =
+  deepseek === undefined ? 'deepseek-v4-flash is not in the relay catalog right now' : false
+
 test('exactly one relay route is declared', () => {
   assert.deepEqual(Object.keys(providers), ['agentrouter'], 'a second route would double every model in the picker')
 })
@@ -42,7 +52,7 @@ test('the plugin row is inserted so the fence and the switch actually load', () 
 
 test('every model declares the levels the relay was probed with', () => {
   const ids = route.models.map((model) => model.id)
-  assert.deepEqual(ids, ['claude-opus-5-5', 'gpt-6.1-sol', 'gpt-6-astra', 'deepseek-v4-flash'])
+  assert.deepEqual(ids, ['gpt-5.6-sol', 'gpt-6-astra', 'gpt-6.1-sol'])
 
   const wire = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
   for (const model of route.models) {
@@ -70,22 +80,21 @@ test('every model in the catalog offers a working Off', () => {
   }
 })
 
-test('deepseek-v4-flash can actually stop thinking', () => {
+test('deepseek-v4-flash can actually stop thinking', { skip: deepseekSkip }, () => {
   // Omitting `reasoning_effort` still returns reasoning content for this model,
   // so an empty `off:` would render a switch that changes nothing. Only the
   // relay's own `none` disables it.
-  const efforts = route.models.find((model) => model.id === 'deepseek-v4-flash').reasoningEfforts
-  assert.equal(efforts.off, 'none')
+  assert.equal(deepseek.reasoningEfforts.off, 'none')
 })
 
-test('deepseek-v4-flash declares the DeepSeek thinking protocol explicitly', () => {
+test('deepseek-v4-flash declares the DeepSeek thinking protocol explicitly', { skip: deepseekSkip }, () => {
   // The relay serves this model from a DeepSeek-compatible thinking API under
   // its own hostname, so pi-ai cannot infer the protocol from the URL and the
   // route has to say it. Without the replay flag, assistant tool-call history
   // goes out without `reasoning_content` and that upstream rejects the request
   // — only once a tool call has happened, which is why it hides from fresh
   // sessions.
-  const compat = route.models.find((model) => model.id === 'deepseek-v4-flash').compat
+  const compat = deepseek.compat
   assert.equal(compat?.thinkingFormat, 'deepseek')
   assert.equal(compat?.requiresReasoningContentOnAssistantMessages, true)
   assert.equal(compat?.supportsDeveloperRole, false)
