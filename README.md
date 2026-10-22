@@ -45,7 +45,9 @@
 
 > `claude-opus-5-5` 与 `deepseek-v4-flash` 已不在中转站的 `/v1/models` 中，实测调用返回 **503「当前分组 probation 下对于模型 … 无可用渠道」**，因此本版本不再声明——宁可让选择器里没有，也不放一个必然失败的条目。渠道恢复后把它们加回 `cordis.patch.yml` 即可；`deepseek-v4-flash` 需要的 DeepSeek 思考协议声明在该文件的 git 历史里。
 
-> 所有模型均走 `/v1/chat/completions`。`maxTokens` 上限来自中转站返回值约束，上下文窗口以「大海捞针」实测为准。
+> 所有模型均走 `/v1/responses`（OpenAI Responses API）。中转站按模型收窄了协议：这三个 ID 在 `/v1/chat/completions` 上一律返回 400「模型 … 不支持 /v1/chat/completions 接口，请改用 /v1/responses」。因此路由声明为 `api: openai-responses`，其 `compat` 只能使用该协议提供的开关（`supportsDeveloperRole`、`supportsMaxOutputTokens`、`supportsStrictMode`、`supportsLongCacheRetention`）——completions 的 `thinkingFormat`、`supportsReasoningEffort`、`maxTokensField` 等在 Responses 下会被适配器按名字拒绝。
+>
+> 同一条协议差异还决定了 `off` 的写法：Responses 下映射为 `null` 的档位**完全不发送** `reasoning` 对象，模型仍会思考（`gpt-5.6-sol` 实测省略该字段时返回 25 个 reasoning token）；只有显式 `effort: "none"` 才真正关闭（实测 0 个）。所以三个模型都声明 `off: none`。`maxTokens` 上限来自中转站返回值约束，上下文窗口以「大海捞针」实测为准。
 
 ## 安装
 

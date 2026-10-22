@@ -35,12 +35,17 @@
 # anthropic-messages, the GPT models via openai-responses — and it can lag a
 # relay release behind (it has no `gpt-6.1-sol` yet). A hand-declared route
 # inherits nothing, so capacities, reasoning levels, and compat switches are
-# restated here, adjusted for Chat Completions.
+# restated here, adjusted for the Responses API.
 #
 # `reasoningEfforts` keys are the levels the picker offers; each value is the
-# wire spelling sent as `reasoning_effort`. All three models were probed against
-# the live relay: every level below answered 200. `off:` (declared, no value)
-# offers Off and sends nothing, which is what an OpenAI-shaped endpoint wants.
+# wire spelling sent as `reasoning.effort` on Responses. All three models were
+# probed against the live relay: every level below answered 200.
+#
+# `off:` must carry `none`, not be left empty. On Responses, a level mapped to
+# `null` sends no `reasoning` object at all, and the relay then lets the model
+# think anyway — measured on gpt-5.6-sol, which returned 25 reasoning tokens
+# with the field omitted. An explicit `effort: "none"` is the only spelling that
+# turns it off (measured: 0 reasoning tokens).
 # WHY THE PICKER SAYS NOTHING ABOUT THE ENDPOINT
 # The model picker renders no child slots, so a plugin cannot inject anything
 # into that menu; per group it shows only `displayName`, and per model only the
@@ -55,24 +60,34 @@
       agentrouter:
         displayName: AgentRouter
         apiKeyEnv: AGENTROUTER_API_KEY
-        api: openai-completions
+        # The relay serves this catalog on the Responses API only. On
+        # `/v1/chat/completions` it answers 400 for every one of these ids:
+        #   «模型 gpt-5.6-sol 不支持 /v1/chat/completions 接口，请改用
+        #    /v1/responses» — a routing decision by model, not by account, so
+        # the route has to speak Responses. The fence is unaffected: it rewrites
+        # the host and the User-Agent, both protocol-independent.
+        api: openai-responses
         # Rewritten per request by llm-agentrouter to the selected endpoint.
         baseURL: https://relay.agentrouter.internal/v1
         defaultInput:
           - text
           - image
-        # The relay is not an endpoint pi-ai can recognize, so its detection
-        # would address it as OpenAI itself: `developer` system role and
-        # `max_completion_tokens`. Probes show it accepts plain `system`,
-        # `max_tokens`, top-level `reasoning_effort`, and `strict` tools.
+        # `openai-responses` carries `OpenAIResponsesCompat`, a different type
+        # from the completions one. The completions switches this route used to
+        # declare — `thinkingFormat`, `supportsReasoningEffort`,
+        # `maxTokensField`, `supportsStore`, `supportsUsageInStreaming` — are
+        # refused by name on it, so only the Responses fields are offered:
+        # `supportsDeveloperRole`, `supportsMaxOutputTokens`,
+        # `supportsStrictMode`, `supportsLongCacheRetention`.
+        #
+        # `supportsDeveloperRole: false` keeps the instruction message on
+        # `system` instead of `developer`, matching what the relay accepted on
+        # completions. `supportsStrictMode: true` is probed on Responses: a
+        # `strict: true` tool is accepted and `gpt-6.1-sol` answers with a
+        # `function_call` item.
         compat:
-          thinkingFormat: openai
-          supportsReasoningEffort: true
           supportsDeveloperRole: false
-          maxTokensField: max_tokens
-          supportsStore: false
           supportsStrictMode: true
-          supportsUsageInStreaming: true
         models:
           # The relay's catalog rotates with channel availability. At this
           # writing /v1/models lists these three; `claude-opus-5-5` and
@@ -90,7 +105,7 @@
             contextWindow: 1050000
             maxTokens: 128000
             reasoningEfforts:
-              off:
+              off: none
               minimal: minimal
               low: low
               medium: medium
@@ -102,7 +117,7 @@
             contextWindow: 1050000
             maxTokens: 128000
             reasoningEfforts:
-              off:
+              off: none
               minimal: minimal
               low: low
               medium: medium

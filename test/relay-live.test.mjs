@@ -115,8 +115,8 @@ test('the declared route streams a turn from the relay', { skip }, async () => {
   const { createModels, createProvider } = await import(pathToFileURL(join(dist, 'index.js')).href)
   // The lazy factory, exactly as `dsh-llm-pi-ai` resolves it from its protocol
   // table: `createProvider` wants the built streams object, not the module.
-  const { openAICompletionsApi } = await import(
-    pathToFileURL(join(dist, 'api', 'openai-completions.lazy.js')).href
+  const { openAIResponsesApi } = await import(
+    pathToFileURL(join(dist, 'api', 'openai-responses.lazy.js')).href
   )
   const { apply, Config } = await import('../lib/index.js')
 
@@ -154,12 +154,12 @@ test('the declared route streams a turn from the relay', { skip }, async () => {
             Promise.resolve({ auth: { apiKey: credential?.key ?? key }, source: 'test' }),
         },
       },
-      api: openAICompletionsApi(),
+      api: openAIResponsesApi(),
       models: [
         {
-          id: 'claude-opus-5-5',
-          name: 'Claude Opus 5.5',
-          api: 'openai-completions',
+          id: 'gpt-6.1-sol',
+          name: 'GPT 6.1 Sol',
+          api: 'openai-responses',
           provider: 'agentrouter',
           baseUrl: RELAY_BASE_URL,
           input: ['text'],
@@ -167,18 +167,17 @@ test('the declared route streams a turn from the relay', { skip }, async () => {
           // needs a cost block even when nothing consumes the number. The real
           // adapter materializes one from its catalog; this restates a zero.
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          contextWindow: 1000000,
+          contextWindow: 1050000,
           maxTokens: 128000,
           reasoning: true,
-          thinkingLevelMap: { off: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
+          // `off` carries `none` rather than null: on Responses a null level
+          // sends no `reasoning` object and the model thinks anyway.
+          thinkingLevelMap: { off: 'none', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
+          // Only the switches `openai-responses` offers; the route is declared
+          // on that protocol, so completions fields would be refused here.
           compat: {
-            thinkingFormat: 'openai',
-            supportsReasoningEffort: true,
             supportsDeveloperRole: false,
-            maxTokensField: 'max_tokens',
-            supportsStore: false,
             supportsStrictMode: true,
-            supportsUsageInStreaming: true,
           },
         },
       ],
@@ -186,7 +185,7 @@ test('the declared route streams a turn from the relay', { skip }, async () => {
 
     const models = createModels()
     models.setProvider(provider)
-    const model = models.getModel('agentrouter', 'claude-opus-5-5')
+    const model = models.getModel('agentrouter', 'gpt-6.1-sol')
 
     // The harness sends its attribution User-Agent on every request; the fence
     // is what turns it into the one the relay accepts.
@@ -227,14 +226,18 @@ test('without the fence the relay rejects the harness User-Agent', { skip: key =
   // ever passes, the gate is gone and the fence can be retired.
   const { Config } = await import('../lib/index.js')
   const host = Config({ endpoint: ENDPOINT }).endpoints[ENDPOINT]
-  const res = await fetch(`https://${host}/v1/chat/completions`, {
+  const res = await fetch(`https://${host}/v1/responses`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${key}`,
       'content-type': 'application/json',
       'user-agent': HARNESS_UA,
     },
-    body: JSON.stringify({ model: 'claude-opus-5-5', max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }),
+    body: JSON.stringify({
+      model: 'gpt-6.1-sol',
+      max_output_tokens: 8,
+      input: [{ role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
+    }),
     signal: AbortSignal.timeout(30000),
   })
   assert.equal(res.status, 401, 'the relay is expected to reject an unfenced client')
