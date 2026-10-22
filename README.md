@@ -226,7 +226,8 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 | 插件版本 | 适配的 dsh | 说明 |
 | --- | --- | --- |
-| 2.6.0 | 0.2.x | 改用 **Responses API**（`/v1/responses`）与 `codex_cli_rs` User-Agent；模型目录再次跟随中转站：`gpt-5.6-sol` 回归，`claude-opus-5-5` 与 `deepseek-v4-flash` 因无可用渠道下架；容量与输入模态取自 models.dev（1,050,000 / 128,000，text + image） |
+| 2.6.1 | 0.2.x | 改用 **Responses API**（`/v1/responses`）与 `codex_cli_rs` User-Agent，`off` 一律送 `none`。**2.6.0 在这条路由上无法调用任何模型，请直接升到这个版本** |
+| 2.6.0 | 0.2.x | 模型目录再次跟随中转站：`gpt-5.6-sol` 回归，`claude-opus-5-5` 与 `deepseek-v4-flash` 因无可用渠道下架；容量与输入模态取自 models.dev（1,050,000 / 128,000，text + image）。**协议仍是 chat completions，三个模型均返回 400，已由 2.6.1 修复** |
 | 2.5.0 | 0.2.x | 模型目录跟随中转站更新：`claude-opus-5` → `claude-opus-5-5`、`gpt-5.6-sol` → `gpt-6.1-sol`，`claude-opus-4-8` 下架；402 只在预算池真的耗尽时追加提示 |
 | 2.4.0 | 0.2.x | 设置页显式注册到全部三个插槽（`plugins.bundle.config` / `plugins.row.config` / `plugins.item`）；端点 + 静默重试 + 尝试次数 |
 | 2.3.0 | 0.1.7+ / 0.2.x | 静默重试开关 + 桌面端支持（profile 覆盖路由时自愈） |
