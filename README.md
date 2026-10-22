@@ -23,7 +23,7 @@
 | 端点 + 请求兼容 | `lib/index.js` | 注册 `llm-agentrouter` 设置分节；把哨兵主机改写为所选端点，把 `user-agent` 换成该中转站要求的取值，按端点绕过进程代理直连，并给缺失 `required` 数组的工具 schema 补上空数组（部分上游池按 null 校验并拒绝） |
 | 路由自愈 | `lib/route.js` | 路由的运行时副本。profile 自己的补丁层会整体覆盖 `llm-pi-ai.providers`（见「桌面端支持」），围栏据此把这条路由重新声明回去 |
 | 端点开关 + 重试开关 | `lib/client.js` | 注册「插件」页里的 AgentRouter 卡片：端点分段控件、静默重试开关、最大尝试次数。设置数据由宿主 `settings.describe` 提供，写入走 `configForms` 的 `mutate` |
-| 行为测试 | `test/` | 66 项：浏览器 bundle 5 项、bundle patch 8 项、改写语义 10 项（含 4 项 402 注释）、直连传输 10 项、工具 schema 补齐 3 项、静默重试 7 项、路由自愈 17 项、运行时路由与补丁一致 4 项、活体流式 2 项（无 key 时跳过） |
+| 行为测试 | `test/` | 69 项：浏览器 bundle 5 项、bundle patch 10 项、改写语义 10 项（含 4 项 402 注释）、直连传输 10 项、工具 schema 补齐 4 项、静默重试 7 项、路由自愈 17 项、运行时路由与补丁一致 4 项、活体流式 2 项（无 key 时跳过） |
 
 ## 为什么是一条路由，而不是两条
 
@@ -39,13 +39,15 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | `gpt-5.6-sol` | GPT 5.6 Sol | 1,050,000 | 128,000 | text / image | off / minimal / low / medium / high / xhigh / max |  |
 | `gpt-6-astra` | GPT 6 Astra | 1,050,000 | 128,000 | text / image | off / minimal / low / medium / high / xhigh / max |  |
-| `gpt-6.1-sol` | GPT 6.1 Sol | 1,050,000 | 128,000 | text / image | off / low / medium / high / xhigh / max | 档位对齐厂商目录的 `gpt-6-sol`（`off` 送出 `none`，不提供 `minimal`） |
+| `gpt-6.1-sol` | GPT 6.1 Sol | 1,050,000 | 128,000 | text / image | off / low / medium / high / xhigh / max | 档位对齐厂商目录的 `gpt-6-sol`（不提供 `minimal`） |
+
+> 三个模型的 `off` 都送出 `reasoning.effort: "none"`，**不留空**。Responses 下把档位映射为 `null` 等于完全不发 `reasoning` 对象，中转站便让模型照常思考——实测 `gpt-5.6-sol` 省略该字段返回 25 个 reasoning token，显式 `none` 返回 0 个。空 `off:` 会渲染出一个按了没反应的「关闭」档。
 
 > 容量与模态来自 [models.dev](https://models.dev) 的 `agentrouter` 条目；它对三个模型一致给出 1,050,000 / 128,000 与 text / image / PDF 输入，而 harness 只认 `text` 与 `image`，所以 `defaultInput` 声明这两种。
 
 > `claude-opus-5-5` 与 `deepseek-v4-flash` 已不在中转站的 `/v1/models` 中，实测调用返回 **503「当前分组 probation 下对于模型 … 无可用渠道」**，因此本版本不再声明——宁可让选择器里没有，也不放一个必然失败的条目。渠道恢复后把它们加回 `cordis.patch.yml` 即可；`deepseek-v4-flash` 需要的 DeepSeek 思考协议声明在该文件的 git 历史里。
 
-> 所有模型均走 `/v1/chat/completions`。`maxTokens` 上限来自中转站返回值约束，上下文窗口以「大海捞针」实测为准。
+> 所有模型均走 **`/v1/responses`（OpenAI Responses API）**，不是 `/v1/chat/completions`。中转站对这三个模型会直接拒绝 chat 接口：`模型 gpt-5.6-sol 不支持 /v1/chat/completions 接口，请改用 /v1/responses`。`maxTokens` 上限来自中转站返回值约束，上下文窗口以「大海捞针」实测为准。
 
 ## 安装
 
@@ -224,7 +226,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 | 插件版本 | 适配的 dsh | 说明 |
 | --- | --- | --- |
-| 2.6.0 | 0.2.x | 模型目录再次跟随中转站：`gpt-5.6-sol` 回归，`claude-opus-5-5` 与 `deepseek-v4-flash` 因无可用渠道下架；容量与输入模态改由 models.dev 提供（1,050,000 / 128,000，text + image） |
+| 2.6.0 | 0.2.x | 改用 **Responses API**（`/v1/responses`）与 `codex_cli_rs` User-Agent；模型目录再次跟随中转站：`gpt-5.6-sol` 回归，`claude-opus-5-5` 与 `deepseek-v4-flash` 因无可用渠道下架；容量与输入模态取自 models.dev（1,050,000 / 128,000，text + image） |
 | 2.5.0 | 0.2.x | 模型目录跟随中转站更新：`claude-opus-5` → `claude-opus-5-5`、`gpt-5.6-sol` → `gpt-6.1-sol`，`claude-opus-4-8` 下架；402 只在预算池真的耗尽时追加提示 |
 | 2.4.0 | 0.2.x | 设置页显式注册到全部三个插槽（`plugins.bundle.config` / `plugins.row.config` / `plugins.item`）；端点 + 静默重试 + 尝试次数 |
 | 2.3.0 | 0.1.7+ / 0.2.x | 静默重试开关 + 桌面端支持（profile 覆盖路由时自愈） |
@@ -236,7 +238,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://<代理主机>:<端口> dsh web
 
 ```bash
 npm ci        # 仅测试所需的 devDependencies
-npm test      # 66 项
+npm test      # 69 项
 ```
 
 `lib/route.js` 由 `cordis.patch.yml` 生成，不要手改：
@@ -247,12 +249,12 @@ npm run gen-route     # 等价于 node scripts/gen-route.mjs
 
 `test/route-parity.test.mjs` 会比对两者，改了一处而忘了重跑生成器会被测试拦下。
 
-克隆后即可跑：66 项中 62 项通过，4 项跳过——2 项活体测试在无 key 时跳过（空字符串等同于无 key，未配置的 GitHub Actions secret 正是以空串到达），另 2 项只在 `deepseek-v4-flash` 位于中转站目录中时才执行。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那 2 项活体测试也会真跑。
+克隆后即可跑：69 项中 65 项通过，4 项跳过——2 项活体测试在无 key 时跳过（空字符串等同于无 key，未配置的 GitHub Actions secret 正是以空串到达），另 2 项只在 `deepseek-v4-flash` 位于中转站目录中时才执行。CI（`.github/workflows/test.yml`）跑的就是这一条命令；仓库若配置了 `AGENTROUTER_API_KEY` secret，那 2 项活体测试也会真跑。
 
 **这两项活体测试会真的向中转站发请求，每次都在消耗额度。** 它们的 key 解析顺序是 `AGENTROUTER_API_KEY` 环境变量、然后 `$DSH_HOME/.credentials.yaml`，所以只要凭据文件里存了 key 就会跑——把 `DSH_HOME` 指到一个空目录即可让它们重新跳过：
 
 ```bash
-DSH_HOME=/tmp/dsh-offline npm test     # 62 通过、4 跳过，零请求
+DSH_HOME=/tmp/dsh-offline npm test     # 65 通过、4 跳过，零请求
 ```
 
 

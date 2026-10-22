@@ -132,6 +132,45 @@ test('tool schemas reach the wire with an explicit required array', async () => 
   assert.equal(sent.messages.length, 1, 'the messages are preserved')
 })
 
+test('Responses-shaped tool schemas are filled too', async () => {
+  // The route speaks the Responses API, where the schema sits on the tool
+  // itself rather than under `function`. The completions-only branch would see
+  // `tool.function === undefined` for every one of these and fill nothing —
+  // silently, since it would still look like the right code path.
+  const dispose = await activate()
+  try {
+    const res = await fetch(`http://${SENTINEL}/v1/responses`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-6.1-sol',
+        input: [{ role: 'user', content: [{ type: 'input_text', text: 'ok' }] }],
+        tools: [
+          // The harness shape for a tool with no required parameters.
+          { type: 'function', name: 'get_goal', description: 'Read the goal.', strict: false, parameters: { type: 'object', properties: {} } },
+          // A partial schema nested one level down.
+          { type: 'function', name: 'write', description: 'Write.', parameters: { type: 'object', properties: { path: { type: 'string' } } } },
+          // Already-explicit schemas keep their declared requiredness.
+          { type: 'function', name: 'edit', description: 'Edit.', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+          // `strict: true` is left to its author, as in the completions shape.
+          { type: 'function', name: 'sealed', description: 'Strict.', strict: true, parameters: { type: 'object', properties: { a: { type: 'string' } } } },
+        ],
+      }),
+    })
+    assert.equal(res.status, 200, 'the fence must not reject a responses body')
+    await res.json()
+  } finally {
+    dispose()
+  }
+  const sent = JSON.parse(seen.at(-1).body)
+  const byName = (name) => sent.tools.find((tool) => tool.name === name)
+  assert.deepEqual(byName('get_goal').parameters, { type: 'object', properties: {}, required: [] })
+  assert.deepEqual(byName('write').parameters, { type: 'object', properties: { path: { type: 'string' } }, required: [] })
+  assert.deepEqual(byName('edit').parameters, { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] })
+  assert.equal(byName('sealed').parameters.required, undefined, 'a strict tool is left alone')
+  assert.equal(sent.model, 'gpt-6.1-sol', 'everything around the schemas is preserved')
+})
+
 test('bodies that need no fill are not rebuilt', async () => {
   const dispose = await activate()
   const withoutTools = '{"model":"claude-opus-5-5","messages":[]}'

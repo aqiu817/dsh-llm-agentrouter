@@ -55,24 +55,23 @@
       agentrouter:
         displayName: AgentRouter
         apiKeyEnv: AGENTROUTER_API_KEY
-        api: openai-completions
+        api: openai-responses
         # Rewritten per request by llm-agentrouter to the selected endpoint.
         baseURL: https://relay.agentrouter.internal/v1
         defaultInput:
           - text
           - image
-        # The relay is not an endpoint pi-ai can recognize, so its detection
-        # would address it as OpenAI itself: `developer` system role and
-        # `max_completion_tokens`. Probes show it accepts plain `system`,
-        # `max_tokens`, top-level `reasoning_effort`, and `strict` tools.
+        # These models are served over the Responses API only: a chat completion
+        # is refused outright with «模型 … 不支持 /v1/chat/completions 接口，请改用
+        # /v1/responses». The switches below are the ones pi-ai's Responses gate
+        # takes — the Chat Completions fields (`thinkingFormat`,
+        # `maxTokensField`, `supportsStore`, `supportsUsageInStreaming`) mean
+        # nothing here. `developer` stays off because the relay rejected it on
+        # the previous protocol and `system` is accepted; strict tools were
+        # probed working.
         compat:
-          thinkingFormat: openai
-          supportsReasoningEffort: true
           supportsDeveloperRole: false
-          maxTokensField: max_tokens
-          supportsStore: false
           supportsStrictMode: true
-          supportsUsageInStreaming: true
         models:
           # The relay's catalog rotates with channel availability. At this
           # writing /v1/models lists these three; `claude-opus-5-5` and
@@ -85,12 +84,18 @@
           # three at a 1,050,000 context window, 128,000 output, and text /
           # image / PDF input. The harness offers only `text` and `image`, so
           # that is what `defaultInput` above declares.
+          #
+          # Every model spells Off as `none`, never an empty `off:`. A level
+          # mapped to null sends no `reasoning` object at all, and the relay
+          # then lets the model think anyway — measured on gpt-5.6-sol: 25
+          # reasoning tokens with the field omitted, 0 with an explicit `none`.
+          # An empty `off:` would render a switch that does nothing.
           - id: gpt-5.6-sol
             name: GPT 5.6 Sol
             contextWindow: 1050000
             maxTokens: 128000
             reasoningEfforts:
-              off:
+              off: none
               minimal: minimal
               low: low
               medium: medium
@@ -102,7 +107,7 @@
             contextWindow: 1050000
             maxTokens: 128000
             reasoningEfforts:
-              off:
+              off: none
               minimal: minimal
               low: low
               medium: medium
@@ -110,8 +115,7 @@
               xhigh: xhigh
               max: max
           # Its levels mirror the vendor catalog's `gpt-6-sol` entry, which is
-          # one release behind this id: `off` carries `none`, `minimal` is not
-          # offered.
+          # one release behind this id: `minimal` is not offered.
           - id: gpt-6.1-sol
             name: GPT 6.1 Sol
             contextWindow: 1050000

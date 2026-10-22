@@ -72,11 +72,47 @@ test('every model declares the levels the relay was probed with', () => {
 })
 
 test('every model in the catalog offers a working Off', () => {
-  // Levels are withheld only where the relay rejects them — the retired glm-5.3
-  // was such a case (it always thinks). No model in the current catalog is:
-  // each declares `off` and was probed with it working.
+  // Offering Off is not enough — it has to *do* something. On Responses a level
+  // mapped to null sends no `reasoning` object at all and the relay lets the
+  // model think anyway (measured on gpt-5.6-sol: 25 reasoning tokens with the
+  // field omitted, 0 with an explicit `none`). So Off must carry a wire value.
   for (const model of route.models) {
-    assert.ok('off' in model.reasoningEfforts, `${model.id} must offer Off`)
+    assert.equal(
+      model.reasoningEfforts?.off,
+      'none',
+      `${model.id} must spell Off as "none", not leave it empty`,
+    )
+  }
+})
+
+test('the route speaks the protocol the relay serves its catalog on', () => {
+  // The relay answers 400 for every id in this catalog on
+  // /v1/chat/completions («请改用 /v1/responses»), so completions here would
+  // break every model rather than one.
+  assert.equal(route.api, 'openai-responses')
+})
+
+test('no compat switch is declared that the route protocol refuses', () => {
+  // The failure this guards against is a hard resolution error, not a silent
+  // one: `model "<id>" sets compat "<field>", but its api is "openai-responses",
+  // which does not take it`. dsh-llm-pi-ai gates every switch by protocol, and
+  // the two compat types share almost no field names.
+  const offered = new Set([
+    'supportsDeveloperRole',
+    'supportsMaxOutputTokens',
+    'supportsStrictMode',
+    'supportsLongCacheRetention',
+  ])
+  for (const [site, compat] of [
+    ['route', route.compat],
+    ...route.models.map((model) => [`model ${model.id}`, model.compat]),
+  ]) {
+    for (const field of Object.keys(compat ?? {})) {
+      assert.ok(
+        offered.has(field),
+        `${site} sets compat "${field}", which openai-responses does not offer; it offers ${[...offered].join(', ')}`,
+      )
+    }
   }
 })
 
